@@ -30,8 +30,8 @@ model_catalog_json = "/Users/cgas/.codex/model-catalog.json"
 
 The router ensures this setting in both states. Per-model context and
 automatic compaction limits live in `model-catalog.json`. GPT-6 Astra and
-GPT-6 Sol are set to an 872,000-token context window and a 700,000-token
-automatic compaction threshold.
+`sol-6.1` are set to an 872,000-token context window and a
+700,000-token automatic compaction threshold.
 
 Codex loads the model catalog at startup. Restart ChatGPT after a catalog change
 to use the new values.
