@@ -6,6 +6,7 @@
 - Installed CLIs include `sr`, `sg` (`ast-grep`), `rg`, `git`, `gh`, `bun`, `bunx`, `uv`, and `uvx`; use them where useful to improve efficiency, productivity, and output quality.
 - For inline one-off JavaScript or TypeScript commands, prefer `bun` or `bunx` over `node` or `npx` when available.
 - Prefer bun + javascript / typescript for one off commands over python
+- Use @Browser by default for browser work unless the user explicitly requests another browser.
 - When waiting on a background process that is long running (over 1 minute) set a cron to check in on the output with reasonable durations instead of continuously polling. If you think it will take 20 minutes, check at 18 for status, then at a lower interval after that depending on progress made. This is not for cli commands. This is for background processes that you cannot track via cli IE output of a Chatgpt.com chat
 
 ## Pull request descriptions
