@@ -1,0 +1,13 @@
+model_provider = "vibeproxy"
+model = "claude-fable-5-1"
+model_reasoning_effort = "medium"
+service_tier = "default"
+
+[model_providers.vibeproxy]
+name = "VibeProxy (Claude subscription)"
+base_url = "http://127.0.0.1:8318/v1"
+wire_api = "responses"
+requires_openai_auth = false
+supports_websockets = true
+request_max_retries = 2
+stream_idle_timeout_ms = 900000

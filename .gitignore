@@ -19,3 +19,4 @@
 !idle-compact/*.plist
 !model-catalog.json
 !opus.config.toml
+!fable.config.toml
