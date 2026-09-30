@@ -171,7 +171,7 @@
         {
           "id": "priority",
           "name": "Fast",
-          "description": "1.5x speed"
+          "description": "2x speed, increased usage"
         }
       ],
       "available_access_programs": {
