@@ -18,5 +18,3 @@
 !idle-compact/README.md
 !idle-compact/*.plist
 !model-catalog.json
-!bin/
-!bin/codex-router
