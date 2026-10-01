@@ -1,0 +1,6 @@
+name = "opus"
+description = "Use claude-opus-5-5 through VibeProxy for delegated investigation and implementation tasks."
+developer_instructions = "Read the delegated task and perform it with the available tools. Report concrete results. You are not alone in the workspace; preserve changes made by others."
+model = "claude-opus-5-5"
+model_provider = "vibeproxy"
+model_reasoning_effort = "high"
