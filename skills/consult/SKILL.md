@@ -53,7 +53,7 @@ Omit `prompt` to send only the attachments. Pass `send: false` to prepare the ex
 
 Use `send: false` only to validate setup without typing or sending the prompt. When `paths` are supplied, the files remain attached to the unsent draft. For a visual deliverable, use `createImage: true`, set `attachGitHub: false`, and pass the desired aspect-ratio label when needed. ChatGPT image mode and the GitHub plugin cannot remain attached to the same composer. Put the required context in the prompt or `paths`, and omit GitHub-specific instructions. The helper uses ChatGPT's visible ratio control when available and otherwise adds an explicit ratio instruction to the prompt.
 
-`thinkingLevel` defaults to `"pro"`, which selects the `Latest` Pro model and verifies the visible `6 Pro` composer control. Only choose a non-pro thinking level (`"instant"`, `"medium"`, `"high"`, or `"extra-high"`) when the user explicitly requests it.
+`thinkingLevel` defaults to `"pro"`, which selects `Latest`, verifies `6 Pro` in the model picker, and checks the Pro power setting. Only choose a non-pro thinking level (`"instant"`, `"medium"`, `"high"`, or `"extra-high"`) when the user explicitly requests it.
 
 If authentication is required, keep the tab as a handoff and ask the user to sign in. Never handle passwords, OTPs, or CAPTCHAs.
 
@@ -112,6 +112,8 @@ The helper ends immediately after sending and must not poll, refresh, extract th
 When the task requires ChatGPT's answer, do not poll the output or run a foreground sleep/check loop. Set or reuse a five-minute heartbeat timer on the current Codex task through the automation tool, then end the turn. Save the consultation URL and the expected response in the timer prompt. Check once per timer wake-up; do not check between wake-ups.
 
 Use the Codex app's read-only `mcp__codex_app__read_thread` first when available. The conversation ID is the final `/c/<id>` segment of the helper's URL. Call `read_thread` with that `threadId`, a small `turnLimit`, and `maxOutputCharsPerItem: 20000` (the tool's maximum). ChatGPT conversations appear as `kind: "chatgpt"`; a finished answer is an assistant `agentMessage` in a completed turn. An idle thread or a completed turn containing only a `userMessage` does **not** prove the answer is ready. If the helper did not return a conversation URL, use `mcp__codex_app__list_threads` to identify the recent ChatGPT chat by project and prompt before reading it; do not rely on a title alone.
+
+New chats can briefly use a `local-chatgpt` URL before cloud persistence finishes. The helper omits that temporary URL; resolve the conversation with `list_threads` by project and prompt as above.
 
 `read_thread` can mark a long `agentMessage` as `truncated: true`. Use the normal in-app Browser workflow only when the app tool is unavailable, cannot identify the chat, or omits text needed to evaluate the answer. Do not claim to have read a truncated answer in full. Browser authentication and CAPTCHA handoff rules still apply; never solve a CAPTCHA. Stay quiet while the answer is absent or still running. When it finishes, evaluate it, report the result on the current task, and pause the timer. If the user has paused the underlying goal, notify them that the answer is ready without resuming goal work until they resume it. Report a blocker that needs user action once and pause the timer rather than repeating the same blocked check. If task timers are unavailable, preserve the tab and report that automatic checking could not be set up; do not substitute a polling loop.
 

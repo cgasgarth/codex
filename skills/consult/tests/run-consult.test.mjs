@@ -22,7 +22,7 @@ function modeTab({ checked = false, authenticationRequired = false, missing = fa
       return 1;
     },
     async getAttribute(name) {
-      return name === "aria-checked" && chatChecked ? "true" : "false";
+      return name === "aria-pressed" && chatChecked ? "true" : "false";
     },
     async isVisible() {
       return true;
@@ -33,7 +33,7 @@ function modeTab({ checked = false, authenticationRequired = false, missing = fa
       return missing ? 0 : 1;
     },
     getByRole(role, options) {
-      expect(role).toBe("radio");
+      expect(role).toBe("button");
       expect(options).toEqual({ name: "Chat", exact: true });
       return chat;
     },
@@ -48,8 +48,8 @@ function modeTab({ checked = false, authenticationRequired = false, missing = fa
         return authenticationRequired ? "Log in" : "ChatGPT";
       },
       getByRole(role, options) {
-        expect(role).toBe("radiogroup");
-        expect(options).toEqual({ name: "Select chat surface", exact: true });
+        expect(role).toBe("group");
+        expect(options).toEqual({ name: "Composer mode", exact: true });
         return surface;
       },
     },
@@ -96,20 +96,15 @@ describe("ensureChatMode", () => {
 });
 
 describe("attachGitHubPlugin", () => {
-  it("reacquires the GitHub option after the fallback search changes the page", async () => {
+  it("waits for the plugin list and attaches the GitHub button", async () => {
     let attached = false;
-    let searches = 0;
-    let optionQueries = 0;
+    let waited = false;
     const box = {
       async count() {
         return 1;
       },
       async textContent() {
         return "";
-      },
-      async type(value) {
-        expect(value).toBe("github");
-        searches += 1;
       },
       getByText(text, options) {
         expect(text).toBe("GitHub");
@@ -137,30 +132,14 @@ describe("attachGitHubPlugin", () => {
             return box;
           }
           expect(role).toBe("button");
-          expect(options).toEqual({ name: "Add files and more", exact: true });
-          return add;
-        },
-        getByText(text, options) {
-          expect(text).toBe("GitHub");
-          expect(options).toEqual({ exact: true });
-          optionQueries += 1;
-          const available = optionQueries > 1;
+          if (options.name === "Add files and more") return add;
+          expect(options.name.test("GitHub Triage PRs, issues, CI, and publish flows")).toBe(true);
           return {
+            async waitFor() { waited = true; },
             async count() {
-              return available ? 1 : 0;
+              return waited ? 1 : 0;
             },
-            locator(selector) {
-              expect(selector).toBe("xpath=ancestor::div[@tabindex='0'][1]");
-              return {
-                async count() {
-                  return available ? 1 : 0;
-                },
-                async click() {
-                  expect(available).toBe(true);
-                  attached = true;
-                },
-              };
-            },
+            async click() { attached = true; },
           };
         },
       },
@@ -168,11 +147,7 @@ describe("attachGitHubPlugin", () => {
 
     await attachGitHubPlugin(tab, "New chat in Consult");
 
-    expect({ attached, optionQueries, searches }).toEqual({
-      attached: true,
-      optionQueries: 2,
-      searches: 1,
-    });
+    expect({ attached, waited }).toEqual({ attached: true, waited: true });
   });
 });
 
@@ -286,37 +261,19 @@ describe("ensureThinkingLevel", () => {
   function thinkingTab(initialLabel = "5.6 Pro") {
     let activeLabel = initialLabel;
     let menuOpen = false;
-    let modelMenuOpen = false;
-    let power = 4;
+    let power = ["Instant", "Medium", "High", "Extra High"].indexOf(initialLabel);
+    if (power < 0) power = 4;
     let powerChanges = 0;
-    let latestSelected = false;
-    const button = (label) => ({
-      async click() {
-        menuOpen = !menuOpen;
-      },
-      async count() {
-        if (label === "Thinking effort") return menuOpen ? 1 : 0;
-        return (label instanceof RegExp ? label.test(activeLabel) : activeLabel === label) ? 1 : 0;
-      },
-      async isVisible() {
-        if (label === "Thinking effort") return menuOpen;
-        return label instanceof RegExp ? label.test(activeLabel) : activeLabel === label;
-      },
-      async waitFor() {
-        if (!(label instanceof RegExp ? label.test(activeLabel) : activeLabel === label)) {
-          throw new Error(`${String(label)} not visible`);
-        }
-      },
-    });
-    const main = {
-      getByRole(role, options) {
-        expect(role).toBe("button");
-        return button(options.name);
-      },
+    let latestSelected = initialLabel === "6 Pro";
+    const control = {
+      async click() { menuOpen = !menuOpen; },
+      async count() { return 1; },
     };
     const slider = {
-      async count() {
-        return menuOpen ? 1 : 0;
+      async count() { return menuOpen ? 1 : 0; },
+      async getAttribute(name) {
+        expect(name).toBe("aria-valuenow");
+        return String(power);
       },
       async press(key) {
         expect(menuOpen).toBe(true);
@@ -326,64 +283,49 @@ describe("ensureThinkingLevel", () => {
         activeLabel = ["Instant", "Medium", "High", "Extra High", "6 Pro"][power];
       },
     };
-    const effortMenu = {
-      async count() {
-        return menuOpen ? 1 : 0;
-      },
-      async isVisible() {
-        return menuOpen;
-      },
-      getByRole(role, options) {
-        expect(role).toBe("menuitem");
-        expect(options).toEqual({ name: "Select model", exact: true });
-        return {
-          async click() {
-            modelMenuOpen = true;
-          },
-          async count() {
-            return menuOpen ? 1 : 0;
-          },
-        };
-      },
+    const menu = {
+      async count() { return menuOpen ? 1 : 0; },
+      async isVisible() { return menuOpen; },
+      async waitFor() { expect(menuOpen).toBe(true); },
     };
     const latestRadio = {
-      async count() {
-        return menuOpen && modelMenuOpen ? 1 : 0;
-      },
+      async count() { return menuOpen ? 1 : 0; },
       async getAttribute(name) {
-        return name === "aria-checked" && latestSelected ? "true" : "false";
-      },
-      async isVisible() {
-        return menuOpen && modelMenuOpen;
+        expect(name).toBe("aria-checked");
+        return String(latestSelected);
       },
       async press(key) {
         expect(key).toBe("Space");
         latestSelected = true;
         activeLabel = "6 Pro";
-        modelMenuOpen = false;
       },
     };
     const tab = {
       playwright: {
         async domSnapshot() {},
         locator(selector) {
-          if (selector === "main") return main;
-          expect(selector).toBe('[role="slider"]');
-          return slider;
+          if (selector === '[role="slider"]') return slider;
+          if (selector === '[role="menuitemradio"]') return {
+            filter(options) {
+              expect(options.hasText.test("Latest")).toBe(true);
+              return latestRadio;
+            },
+          };
+          expect(selector).toBe('[role="menuitem"][aria-label="Select model"]');
+          return {
+            async count() { return menuOpen ? 1 : 0; },
+            async innerText() { return latestSelected ? "6Pro" : "5.6Pro"; },
+          };
         },
         getByRole(role, options) {
-          if (role === "menu") {
-            expect(options).toEqual({ name: "Thinking effort", exact: true });
-            return effortMenu;
-          }
-          expect(role).toBe("menuitemradio");
-          expect(options).toEqual({ name: "Latest", exact: true });
-          return latestRadio;
+          expect(options).toEqual({ name: "Select ChatGPT model", exact: true });
+          if (role === "menu") return menu;
+          expect(role).toBe("button");
+          return control;
         },
       },
     };
-
-    return { tab, state: () => ({ activeLabel, latestSelected, menuOpen, modelMenuOpen, power, powerChanges }) };
+    return { tab, state: () => ({ activeLabel, latestSelected, menuOpen, modelMenuOpen: false, power, powerChanges }) };
   }
 
   for (const initial of ["Instant", "Medium", "High", "Extra High", "6 Pro"]) {
@@ -446,7 +388,7 @@ describe("sendToExistingConsult", () => {
         },
       },
       async url() {
-        return "https://chatgpt.com/c/existing";
+        return "https://chatgpt.com/c/6abedf2c-47f0-83e9-aae0-02cba87d222b";
       },
     };
 
@@ -461,8 +403,13 @@ describe("sendToExistingConsult", () => {
       status: "existing_session_prepared_not_sent",
       attachments: [],
       tab,
-      url: "https://chatgpt.com/c/existing",
+      url: "https://chatgpt.com/c/6abedf2c-47f0-83e9-aae0-02cba87d222b",
     });
+
+    tab.url = async () => "https://chatgpt.com/c/local-chatgpt%3A07ca6f60-2752-43bd-8c8b-a539c6c5d00a";
+    const pending = await sendToExistingConsult({ tab, prompt: "Cloud persistence is pending.", send: false });
+    expect(pending.status).toBe("existing_session_prepared_not_sent");
+    expect(pending.url).toBeUndefined();
   });
 
   it("clears an existing draft without confirmation before preparing the follow-up", async () => {
@@ -497,7 +444,7 @@ describe("sendToExistingConsult", () => {
         },
       },
       async url() {
-        return "https://chatgpt.com/c/existing";
+        return "https://chatgpt.com/c/6abedf2c-47f0-83e9-aae0-02cba87d222b";
       },
     };
 

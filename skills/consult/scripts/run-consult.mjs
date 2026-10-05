@@ -18,10 +18,17 @@ async function visible(locator) {
   return count === 1 && await locator.isVisible();
 }
 
+async function conversationUrl(tab) {
+  const url = await tab.url();
+  const id = new URL(url).pathname.split("/c/")[1];
+  // A newly submitted Chat first uses a local-chatgpt ID before cloud persistence finishes.
+  return /^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(id ?? "") ? url : undefined;
+}
+
 export async function ensureChatMode(tab) {
   await tab.playwright.domSnapshot();
-  const surface = tab.playwright.getByRole("radiogroup", {
-    name: "Select chat surface",
+  const surface = tab.playwright.getByRole("group", {
+    name: "Composer mode",
     exact: true,
   });
   try {
@@ -33,15 +40,15 @@ export async function ensureChatMode(tab) {
   }
   await requireOne(surface, "Chat/Work surface selector");
 
-  const chat = surface.getByRole("radio", { name: "Chat", exact: true });
+  const chat = surface.getByRole("button", { name: "Chat", exact: true });
   await requireOne(chat, "Chat surface option");
-  if (await chat.getAttribute("aria-checked") !== "true") {
+  if (await chat.getAttribute("aria-pressed") !== "true") {
     await chat.click();
     await tab.playwright.domSnapshot();
   }
 
   if (
-    await chat.getAttribute("aria-checked") !== "true"
+    await chat.getAttribute("aria-pressed") !== "true"
     || !await chat.isVisible()
   ) {
     throw new Error("ChatGPT Chat mode could not be selected.");
@@ -70,7 +77,8 @@ async function findProject(tab, requested) {
 }
 
 async function waitForProject(tab, requested) {
-  const control = tab.playwright.getByRole("button", { name: requested, exact: true });
+  const escaped = requested.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const control = tab.playwright.getByRole("button", { name: new RegExp(`^${escaped}$`, "i") });
   try {
     await control.waitFor({ state: "visible", timeoutMs: 15000 });
   } catch {
@@ -103,15 +111,18 @@ async function openProject(tab, project) {
     return { status: "project_not_found", requestedProject: project, fallbackProject: FALLBACK_PROJECT };
   }
 
-  await target.locator.click();
+  const actions = tab.playwright.getByRole("button", {
+    name: `Project actions for ${target.label}`, exact: true,
+  });
+  // Sidebar action buttons are revealed on hover; keyboard activation targets the button directly.
+  await (await requireOne(actions, `project actions for ${target.label}`)).press("Space");
   await tab.playwright.domSnapshot();
-
-  // Expanding a project can replace its sidebar row. Reacquire the project
-  // control so the home button is scoped to the current DOM, not a stale row.
-  target = await findProject(tab, target.label);
-  if (!target) throw new Error(`Project ${project} disappeared after it was opened.`);
-  const row = target.locator.locator("xpath=..");
-  const home = row.getByRole("button", { name: "Open project home", exact: true });
+  const menu = tab.playwright.getByRole("menu", {
+    name: `Project actions for ${target.label}`, exact: true,
+  });
+  await menu.waitFor({ state: "visible", timeoutMs: 15000 });
+  const home = tab.playwright.getByRole("menuitem", { name: "Project home", exact: true });
+  await home.waitFor({ state: "visible", timeoutMs: 5000 });
   await (await requireOne(home, `project-home control for ${project}`)).click();
   const composerName = `New chat in ${target.label}`;
 
@@ -153,7 +164,9 @@ async function chooseLocalFiles(tab, paths) {
   const add = tab.playwright.getByRole("button", { name: "Add files and more", exact: true });
   await (await requireOne(add, "Add files and more button")).click();
   await tab.playwright.domSnapshot();
-  const upload = tab.playwright.getByText("Upload from computer", { exact: true });
+  const upload = tab.playwright.getByRole("button", {
+    name: "Add photos & files Upload from computer", exact: true,
+  });
   const uniqueUpload = await requireOne(upload, "Upload from computer option");
   const chooserPromise = tab.playwright.waitForEvent("filechooser", { timeoutMs: 10000 });
   await uniqueUpload.click();
@@ -165,7 +178,7 @@ async function chooseLocalFiles(tab, paths) {
 }
 
 async function waitForUploadReady(tab) {
-  const sendButton = tab.playwright.getByRole("button", { name: "Send prompt", exact: true });
+  const sendButton = tab.playwright.getByRole("button", { name: "Send", exact: true });
   await sendButton.waitFor({ state: "visible", timeoutMs: 120000 });
   const deadline = Date.now() + 120000;
   while (!await sendButton.isEnabled()) {
@@ -180,21 +193,24 @@ async function attachPreparedFiles(tab, prepared) {
   await tab.playwright.domSnapshot();
   for (const source of prepared.sources) {
     for (const upload of source.uploads) {
-      const attachment = tab.playwright.getByRole("group", { name: upload.name, exact: true });
+      const attachment = tab.playwright.getByRole("button", { name: `Remove ${upload.name}`, exact: true });
       await attachment.waitFor({ state: "visible", timeoutMs: 120000 });
       await requireOne(attachment, `uploaded attachment ${upload.name}`);
+      await tab.playwright.getByRole("progressbar", {
+        name: `Uploading ${upload.name}`, exact: true,
+      }).waitFor({ state: "hidden", timeoutMs: 120000 });
     }
   }
   await waitForUploadReady(tab);
 }
 
 async function sendCurrentComposer(tab) {
-  const sendButton = tab.playwright.getByRole("button", { name: "Send prompt", exact: true });
+  const sendButton = tab.playwright.getByRole("button", { name: "Send", exact: true });
   await sendButton.waitFor({ state: "visible", timeoutMs: 30000 });
-  const uniqueSend = await requireOne(sendButton, "Send prompt button");
+  const uniqueSend = await requireOne(sendButton, "Send button");
   const deadline = Date.now() + 30000;
   while (!await uniqueSend.isEnabled()) {
-    if (Date.now() >= deadline) throw new Error("Send prompt button remained disabled for 30 seconds.");
+    if (Date.now() >= deadline) throw new Error("Send button remained disabled for 30 seconds.");
     await tab.playwright.waitForTimeout(250);
   }
   await uniqueSend.click();
@@ -211,15 +227,9 @@ export async function attachGitHubPlugin(tab, composerName) {
   const add = tab.playwright.getByRole("button", { name: "Add files and more", exact: true });
   await (await requireOne(add, "Add files and more button")).click();
   await tab.playwright.domSnapshot();
-  let github = tab.playwright.getByText("GitHub", { exact: true });
-  if (await github.count() === 0) {
-    await box.type("github");
-    await tab.playwright.domSnapshot();
-    github = tab.playwright.getByText("GitHub", { exact: true });
-  }
-  await requireOne(github, "GitHub attachment option");
-  const githubAction = github.locator("xpath=ancestor::div[@tabindex='0'][1]");
-  await (await requireOne(githubAction, "GitHub attachment action")).click();
+  const github = tab.playwright.getByRole("button", { name: /^GitHub\b/ });
+  await github.waitFor({ state: "visible", timeoutMs: 15000 });
+  await (await requireOne(github, "GitHub attachment option")).click();
   await tab.playwright.domSnapshot();
 
   const pill = (await composer(tab, composerName)).getByText("GitHub", { exact: true });
@@ -278,33 +288,15 @@ function normalizeThinkingLevel(value) {
 
 export async function ensureThinkingLevel(tab, thinkingLevel = "pro") {
   const requested = normalizeThinkingLevel(thinkingLevel);
-  const main = tab.playwright.locator("main");
-  const activeLevels = [
-    { value: "instant", name: "Instant" },
-    { value: "medium", name: "Medium" },
-    { value: "high", name: "High" },
-    { value: "extra-high", name: "Extra High" },
-    { value: "pro", name: /^\d+(?:\.\d+)?\s*Pro$/i },
-  ];
-  let activeMode = null;
-  let activeValue = null;
-  for (const level of activeLevels) {
-    const candidate = main.getByRole("button", {
-      name: level.name,
-      ...(typeof level.name === "string" ? { exact: true } : {}),
-    });
-    if (await visible(candidate)) {
-      activeMode = candidate;
-      activeValue = level.value;
-      break;
-    }
-  }
-  if (!activeMode) throw new Error("The active thinking-level button could not be identified.");
-
-  if (requested.value !== activeValue) {
-    await activeMode.click();
-    await tab.playwright.domSnapshot();
-    let slider = tab.playwright.locator('[role="slider"]');
+  const control = tab.playwright.getByRole("button", { name: "Select ChatGPT model", exact: true });
+  await (await requireOne(control, "model and thinking selector")).click();
+  await tab.playwright.domSnapshot();
+  const menu = tab.playwright.getByRole("menu", { name: "Select ChatGPT model", exact: true });
+  await menu.waitFor({ state: "visible", timeoutMs: 5000 });
+  // The power slider has aria-hidden=true; its DOM role is still keyboard operable.
+  let slider = tab.playwright.locator('[role="slider"]');
+  await requireOne(slider, "thinking-level power slider");
+  if (Number(await slider.getAttribute("aria-valuenow")) !== requested.power) {
     await (await requireOne(slider, "thinking-level power slider")).press("Home");
     for (let power = 0; power < requested.power; power += 1) {
       await tab.playwright.domSnapshot();
@@ -314,40 +306,33 @@ export async function ensureThinkingLevel(tab, thinkingLevel = "pro") {
     await tab.playwright.domSnapshot();
   }
 
-  let effortMenu = tab.playwright.getByRole("menu", { name: "Thinking effort", exact: true });
-  if (!await visible(effortMenu)) {
-    const selected = requested.value === activeValue
-      ? activeMode
-      : main.getByRole("button", { name: requested.label, exact: true });
-    await (await requireOne(selected, `${requested.label} thinking-level button`)).click();
-    await tab.playwright.domSnapshot();
-    effortMenu = tab.playwright.getByRole("menu", { name: "Thinking effort", exact: true });
-  }
-  await requireOne(effortMenu, "Thinking effort menu");
-
   if (requested.value === "pro") {
-    const modelPicker = effortMenu.getByRole("menuitem", { name: "Select model", exact: true });
-    await (await requireOne(modelPicker, "Pro model picker")).click();
-    await tab.playwright.domSnapshot();
-    let latestRadio = tab.playwright.getByRole("menuitemradio", { name: "Latest", exact: true });
-    if (!await visible(latestRadio)) {
-      await modelPicker.click();
-      await tab.playwright.domSnapshot();
-      latestRadio = tab.playwright.getByRole("menuitemradio", { name: "Latest", exact: true });
-    }
+    const latestRadio = tab.playwright.locator('[role="menuitemradio"]').filter({ hasText: /^Latest$/ });
     await requireOne(latestRadio, "Latest model option");
     if (await latestRadio.getAttribute("aria-checked") !== "true") {
       await latestRadio.press("Space");
       await tab.playwright.domSnapshot();
     }
+    if (!await visible(menu)) {
+      await control.click();
+      await tab.playwright.domSnapshot();
+    }
+    if (await latestRadio.getAttribute("aria-checked") !== "true") {
+      throw new Error("Latest Pro model was not selected.");
+    }
+    const modelPicker = tab.playwright.locator('[role="menuitem"][aria-label="Select model"]');
+    await requireOne(modelPicker, "selected model label");
+    if ((await modelPicker.innerText()).replace(/\s+/g, "") !== "6Pro") {
+      throw new Error("The selected Latest model is not 6 Pro.");
+    }
   }
-
-  const closeEffortMenu = main.getByRole("button", { name: "Thinking effort", exact: true });
-  await (await requireOne(closeEffortMenu, "Thinking effort button")).click();
+  slider = tab.playwright.locator('[role="slider"]');
+  if (Number(await slider.getAttribute("aria-valuenow")) !== requested.power) {
+    throw new Error(`${requested.label} power was not selected.`);
+  }
+  await control.click();
   await tab.playwright.domSnapshot();
-  const selected = main.getByRole("button", { name: requested.label, exact: true });
-  await selected.waitFor({ state: "visible", timeoutMs: 5000 });
-  if (!await visible(selected)) throw new Error(`${requested.label} was not visibly selected.`);
+  if (await visible(menu)) throw new Error("The model selector did not close.");
 
   if (requested.value !== "pro") return { thinkingLevel: requested.value, mode: requested.label };
   return { thinkingLevel: requested.value, mode: "Pro", model: "GPT-6" };
@@ -423,7 +408,7 @@ export async function startConsult({ iab, project, prompt, paths = [], send = tr
       chatSurface: surfaceSelection.chatSurface,
       ...modelSelection,
       tab,
-      url: await tab.url(),
+      url: await conversationUrl(tab),
     };
   } catch (error) {
     if (tab && ownedComposerName) {
@@ -458,7 +443,7 @@ export async function sendToExistingConsult({ session, tab = session?.tab, paths
       status: "existing_session_prepared_not_sent",
       attachments: prepared.sources,
       tab,
-      url: await tab.url(),
+      url: await conversationUrl(tab),
     };
 
     await sendCurrentComposer(tab);
@@ -466,7 +451,7 @@ export async function sendToExistingConsult({ session, tab = session?.tab, paths
       status: "sent_to_existing_session",
       attachments: prepared.sources,
       tab,
-      url: await tab.url(),
+      url: await conversationUrl(tab),
     };
   } finally {
     prepared.cleanup();
@@ -483,7 +468,7 @@ export async function sendExpectedExistingDraft({ session, tab = session?.tab, e
     throw new Error("The staged ChatGPT draft does not exactly match the expected prompt; refusing to send it.");
   }
   await sendCurrentComposer(tab);
-  return { status: "sent_expected_existing_draft", tab, url: await tab.url() };
+  return { status: "sent_expected_existing_draft", tab, url: await conversationUrl(tab) };
 }
 
 export function publicResult(session) {
