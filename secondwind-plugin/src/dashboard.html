@@ -34,8 +34,8 @@ async function refresh(){
   const m=await response.json(),saved=Math.max(0,m.tokens_before-m.tokens_after);
   for(const [id,value]of Object.entries({saved,before:m.tokens_before,after:m.tokens_after,outputs:m.rewritten_outputs,requests:m.rewritten_requests,checked:m.outputs,total:m.requests}))$(id).textContent=fmt(value);
   $('reduction').textContent=m.tokens_before?(100*saved/m.tokens_before).toFixed(1)+'%':'0%';
-  $('status').textContent='Updated '+new Date().toLocaleTimeString()+' · refreshes every 5 seconds';
+  $('status').textContent='Updated '+new Date().toLocaleTimeString();
  }catch(error){$('status').textContent=error.message;}
 }
-$('refresh').onclick=refresh;refresh();setInterval(()=>{if(!document.hidden)refresh()},5000);
+$('refresh').onclick=refresh;refresh();
 </script></html>
