@@ -4,9 +4,8 @@
 - Make text shown in Codex threads extremely information-dense; prefer terse, high-signal phrasing and clear shorthand where it preserves meaning.
 - For repeated noisy commands, prefer compact wrappers or summary modes so unchanged success output stays small.
 - Installed CLIs include `sr`, `sg` (`ast-grep`), `rg`, `git`, `gh`, `bun`, `bunx`, `uv`, and `uvx`; use them where useful to improve efficiency, productivity, and output quality.
-- Prefer bun + javascript / typescript for one off commands over python
 - Use @Browser by default for browser work unless the user explicitly requests another browser.
-- When waiting on a background process that is long running (over 1 minute) set a cron to check in on the output with reasonable durations instead of continuously polling. If you think it will take 20 minutes, check at 18 for status, then at a lower interval after that depending on progress made. This is not for cli commands. This is for background processes that you cannot track via cli IE output of a Chatgpt.com chat
+- For background work over one minute that cannot be tracked through CLI output, schedule checks near the expected completion time instead of constant polling.
 
 ## Pull request descriptions
 
@@ -28,21 +27,11 @@
 
 - Use `uv` as the Python manager and package manager.
 
-## Code Mode batching
-
-Within each bounded stage, group multiple already-known, independent,
-non-conflicting tool calls into one `exec` cell and run them concurrently.
-
-In Code Mode, within each bounded stage, run independent, functions.exec-available tool calls concurrently in one functions.exec call. Use await Promise.allSettled([...]) when partial results are useful, and inspect every result; use await Promise.all([...]) only when any failure should abort the batch. Keep dependencies, waits/resumes, approvals, conflicting or interdependent mutations, and adaptive investigations where each result may change the next step sequential. Do not split otherwise batchable inspections across outer tool calls.
-
 ## Engineering Principles
 
-- Do not preserve backward compatibility. Remove obsolete paths instead of adding compatibility layers, fallbacks, or migrations.
-- Never add tests that prove something no longer exists in a repo when it is removed from the repo. Do not have regression tests that prove something was removed and no longer works or exists.
-- Choose the simplest implementation that fully meets the current requirements. Avoid speculative abstractions, configuration, and indirection.
-- Keep components modular and concerns clearly separated.
-- Prefer established, well-maintained libraries when they reduce overall complexity or improve reliability. Do not reimplement common functionality without a clear reason.
-- Lean on the dependencies already in the project before writing your own implementation or adding packages. Do not assume a library lacks a capability without checking its documentation and types.
-- Trust official SDK types at SDK-controlled boundaries. Use exported package types and functions directly. Do not duplicate their contracts or add runtime validation, defensive parsing, or broad casts unless data crosses an untrusted boundary or the SDK documents the value as untyped.
+- Remove obsolete paths; do not add backward compatibility, fallbacks, migrations, or tests that only prove removal.
+- Choose the simplest complete solution. Keep concerns modular; avoid speculative abstractions and configuration.
+- Check existing dependencies, documentation, and types before adding code or packages. Prefer maintained libraries over reimplementing common functions.
+- Use official SDK types directly. Add validation or parsing only for untrusted or untyped data; avoid duplicate contracts and broad casts.
 
 Always talk in ASD-STE100 Simplified Technical English.
