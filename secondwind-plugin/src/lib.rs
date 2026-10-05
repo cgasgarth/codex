@@ -163,7 +163,7 @@ fn dispatch(method: &str, request: &[u8]) -> Result<Value, String> {
     match method {
         "plugin.register" | "plugin.reconfigure" => Ok(json!({
             "schema_version": 1,
-            "metadata": {"Name": "Secondwind", "Version": "0.4.0", "Author": "cgasgarth", "GitHubRepository": "https://github.com/cgasgarth/codex"},
+            "metadata": {"Name": "Secondwind", "Version": "0.4.2", "Author": "cgasgarth", "GitHubRepository": "https://github.com/cgasgarth/codex"},
             "capabilities": {"request_interceptor": true, "management_api": true}
         })),
         "management.register" => {

@@ -9,7 +9,7 @@ keeps routing, streaming, credentials, and compaction.
 
 Build with `cargo build --release`. The Secondwind revision is pinned in
 `Cargo.toml`. Install `target/release/libcpa_secondwind.dylib` as
-`~/.cli-proxy-api/plugins/darwin/arm64/cpa-secondwind-v0.4.0.dylib` while the plugin
+`~/.cli-proxy-api/plugins/darwin/arm64/cpa-secondwind-v0.4.2.dylib` while the plugin
 is disabled, then enable `plugins.configs.cpa-secondwind.enabled` in VibeProxy.
 The config is `~/.cli-proxy-api/config.yaml`; the running proxy reads
 `merged-config.yaml`.
