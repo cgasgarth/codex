@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Secondwind</title>
+<style>
+:root{color-scheme:dark;--bg:#171717;--card:#242424;--muted:#aaa;--green:#86dba0}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:#eee;font:16px system-ui,sans-serif}main{max-width:1050px;margin:48px auto;padding:0 24px}header{display:flex;align-items:center;justify-content:space-between}h1{margin:0;font-size:30px}p{color:var(--muted);line-height:1.6}button{border:1px solid #444;border-radius:8px;padding:9px 16px;background:var(--card);color:inherit;cursor:pointer}.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin:30px 0}.card{padding:24px;border:1px solid #383838;border-radius:12px;background:var(--card)}.label{font-size:14px;color:var(--muted)}.number{font-size:34px;font-weight:600;margin-top:12px}.saved{color:var(--green)}dl{display:grid;grid-template-columns:1fr auto;gap:14px;max-width:560px}dd{margin:0;font-variant-numeric:tabular-nums}#status{font-size:14px}@media(max-width:750px){.cards{grid-template-columns:repeat(2,1fr)}}
+</style>
+<main><header><h1>Secondwind</h1><button id="refresh">Refresh</button></header>
+<p>Lossless inline compression of tool outputs.</p>
+<div class="cards">
+<div class="card"><div class="label">Tokens removed</div><div class="number saved" id="saved">—</div></div>
+<div class="card"><div class="label">Token reduction</div><div class="number" id="reduction">—</div></div>
+<div class="card"><div class="label">Outputs rewritten</div><div class="number" id="outputs">—</div></div>
+<div class="card"><div class="label">Requests rewritten</div><div class="number" id="requests">—</div></div>
+</div>
+<dl><dt>Tool-output tokens before</dt><dd id="before">—</dd><dt>Tool-output tokens after</dt><dd id="after">—</dd><dt>Outputs checked</dt><dd id="checked">—</dd><dt>Requests checked</dt><dd id="total">—</dd></dl>
+<p id="status" role="status">Loading metrics…</p>
+<p>Since this plugin version loaded. Counts include resent tool outputs and retries.<br>Token counts use cl100k, so they estimate model token savings. These are not billing savings. Counters reset when the plugin reloads.</p>
+</main>
+<script>
+const endpoint=__STATS_URL__, $=id=>document.getElementById(id), fmt=n=>Number(n).toLocaleString();
+function savedKey(){
+ const raw=localStorage.getItem('cli-proxy-auth');if(!raw)return '';
+ let decoded=raw;
+ if(raw.startsWith('enc::v1::')){
+  const bytes=Uint8Array.from(atob(raw.slice(9)),c=>c.charCodeAt(0)),mask=new TextEncoder().encode('cli-proxy-api-webui::secure-storage|'+location.host+'|'+navigator.userAgent);
+  decoded=new TextDecoder().decode(bytes.map((v,i)=>v^mask[i%mask.length]));
+ }
+ const data=JSON.parse(decoded),state=data.state||data;return state.managementKey||'';
+}
+async function refresh(){
+ try{
+  const key=savedKey();if(!key)throw Error('Sign in to the management center with Remember password enabled, then reopen this page.');
+  const response=await fetch(endpoint,{cache:'no-store',headers:{Authorization:'Bearer '+key}});if(!response.ok)throw Error('Metrics unavailable (HTTP '+response.status+').');
+  const m=await response.json(),saved=Math.max(0,m.tokens_before-m.tokens_after);
+  for(const [id,value]of Object.entries({saved,before:m.tokens_before,after:m.tokens_after,outputs:m.rewritten_outputs,requests:m.rewritten_requests,checked:m.outputs,total:m.requests}))$(id).textContent=fmt(value);
+  $('reduction').textContent=m.tokens_before?(100*saved/m.tokens_before).toFixed(1)+'%':'0%';
+  $('status').textContent='Updated '+new Date().toLocaleTimeString()+' · refreshes every 5 seconds';
+ }catch(error){$('status').textContent=error.message;}
+}
+$('refresh').onclick=refresh;refresh();setInterval(()=>{if(!document.hidden)refresh()},5000);
+</script></html>
