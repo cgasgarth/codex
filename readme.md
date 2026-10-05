@@ -25,12 +25,15 @@ codex:
   optimize-multi-agent-v2: true
 ```
 
-It removes task-encryption annotations, adapts the upstream namespace, and
-normalizes inter-agent messages. `features.multi_agent_v2.enabled = true` in
-`config.toml` enables V2 for both app and CLI. Catalog entries also advertise V2
-so children receive collaboration tools. No custom backend or updater is
-needed. App updates retain their official signed backend; the proxy setting
-persists independently. VibeProxy must be running and authenticated.
+**The only VibeProxy change is this built-in configuration flag.** No proxy
+code, Codex binary, or app bundle is patched. It removes task-encryption
+annotations, adapts the upstream namespace, and normalizes inter-agent messages.
+
+Codex also needs `features.multi_agent_v2.enabled = true` in `config.toml` and
+`multi_agent_version = "v2"` on catalog entries so children receive collaboration
+tools. App and CLI use the same settings and official signed backend. No custom
+backend or updater remains; app updates preserve this setup. VibeProxy must be
+running and authenticated.
 
 The previous locally compiled backend broke the app's native tools because
 macOS rejected its signing identity. It has been retired. Existing chats can
