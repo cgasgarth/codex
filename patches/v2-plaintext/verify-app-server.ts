@@ -52,6 +52,9 @@ const reader = (async () => {
       }
     }
   }
+  for (const waiter of requests.values()) waiter.reject(new Error("Backend exited before responding"));
+  requests.clear();
+  completedResolve({ status: "backendExited" });
 })();
 try {
   await request("initialize", { clientInfo: { name: "v2_plaintext_probe", title: "V2 plaintext backend test", version: "0.160.0" }, capabilities: { experimentalApi: true } });

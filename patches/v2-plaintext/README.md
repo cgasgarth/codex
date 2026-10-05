@@ -19,24 +19,31 @@ Old encrypted records are not decrypted by this patch.
 ## App launch and updates
 
 `CODEX_CLI_PATH` selects the external backend. A login LaunchAgent sets this
-environment variable. Its plist lives here, with a symlink in
+environment variable and checks for updates. It also watches the app's backend
+package file. Its plist lives here, with a symlink in
 `~/Library/LaunchAgents/com.cgas.codex-v2-plaintext.plist`.
 Restart the app after enabling it. The running app retains its original backend.
 
-App updates cannot overwrite these files. The launcher checks the app's bundled
-CLI version before starting. A mismatch stops with a rebuild command; it does
-not run an old backend against a new app silently.
+App updates cannot overwrite these files. When the bundled CLI version changes,
+the updater downloads matching official source, checks that the patch applies,
+builds a candidate, verifies its version, and checks app-server initialization
+and V2 configuration. Only a passing candidate replaces the installed patch.
 
-Rebuild after an app backend update:
+The build runs in the background because the app has a startup timeout. Until
+it passes, or if it fails, app launches use the bundled backend with V1 defaults.
+The next app launch uses a ready patched update. The updater does not restart
+the app or interrupt existing chats. Concurrent launches share one build.
+Details are in `update.log` and `build.log`.
+
+To retry an update manually:
 
 ```sh
 bun ~/.codex/patches/v2-plaintext/rebuild.ts
 ```
 
-The script downloads the matching official source tag and checks whether the
-patch applies. Source changes may require updating the patch. It builds with
-the `dev-small` profile, using the installed Rust toolchain and macOS Command
-Line Tools. Run real mixed-model probes before restarting on a rebuilt backend:
+Source changes may require updating the patch. Builds use `dev-small`, the
+installed Rust toolchain, and macOS Command Line Tools. Automatic checks make no
+model requests. The full mixed-model probes remain manual:
 
 ```sh
 bun ~/.codex/patches/v2-plaintext/verify-cli.ts
@@ -56,12 +63,16 @@ To launch explicitly after fully quitting the app:
 To disable the override:
 
 ```sh
-launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.cgas.codex-v2-plaintext.plist
-launchctl unsetenv CODEX_CLI_PATH
-unlink ~/Library/LaunchAgents/com.cgas.codex-v2-plaintext.plist
+~/.codex/patches/v2-plaintext/disable.sh
 ```
 
-Then restart the app. Its saved model catalog selects V1 again.
+Then fully quit and reopen the app. Its saved model catalog selects V1 again for
+new chats; existing chats can retain saved V2 metadata. The disable command also
+prevents an in-flight update from activating. To enable the launcher again:
+
+```sh
+~/.codex/patches/v2-plaintext/enable.sh
+```
 
 ## Verified October 4, 2026
 

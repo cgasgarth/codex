@@ -30,18 +30,21 @@ chain through the app-server API. Old encrypted history is not decrypted.
 | --- | --- |
 | App startup | A login LaunchAgent sets `CODEX_CLI_PATH` to the external launcher |
 | Activation | Fully quit and reopen the app; live UI execution still needs verification |
-| App update | Files remain in `~/.codex`; a backend version mismatch stops launch |
-| New backend version | Rebuild, test, then reopen the app |
+| App update | Automatically applies the patch, builds, and checks app-server startup in the background |
+| While updating / on failure | Uses the bundled backend with V1 defaults; details in `patches/v2-plaintext/update.log` |
+| Update ready | The next app launch uses the new patched backend |
 
 ```sh
-bun ~/.codex/patches/v2-plaintext/rebuild.ts
-bun ~/.codex/patches/v2-plaintext/verify-cli.ts
-bun ~/.codex/patches/v2-plaintext/verify-app-server.ts
+# Disable the patch, then fully quit and reopen the app.
+~/.codex/patches/v2-plaintext/disable.sh
+
+# Enable it again, then fully quit and reopen the app.
+~/.codex/patches/v2-plaintext/enable.sh
 ```
 
-Rebuilding is manual. If upstream code changes, the patch may need adjustment.
-See the [patch guide](patches/v2-plaintext/README.md) for launch, disable, and
-verification details. The standard CLI retains the catalog's V1 default.
+Automatic checks use no model tokens. If the patch no longer applies or startup
+fails, it is not activated. Full GPT/Claude tests remain available manually in
+the [patch guide](patches/v2-plaintext/README.md). The standard CLI retains V1.
 
 ## Other custom settings
 
