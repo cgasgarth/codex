@@ -86,6 +86,7 @@ codex-tool-search-shim:
   enabled: true
   priority: 200
   bridge_models: [claude-opus-5-5, claude-fable-5-1]
+  max_active_tool_bytes: 2097152
 ```
 
 For rollback, disable this plugin in the management UI and set
