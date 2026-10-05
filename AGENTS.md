@@ -1,5 +1,7 @@
 # Global Codex Instructions
 
+- When spawning a subagent across GPT and Claude model families, use `fork_turns="none"` and include the required task context in its message. Native GPT compaction state cannot be read by Claude.
+
 - Keep routine command, script, hook, poll, and validation output concise: compact summaries on success, bounded actionable excerpts on failure.
 - Make text shown in Codex threads extremely information-dense; prefer terse, high-signal phrasing and clear shorthand where it preserves meaning.
 - For repeated noisy commands, prefer compact wrappers or summary modes so unchanged success output stays small.

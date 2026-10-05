@@ -56,6 +56,14 @@ The Codex credential has `websockets: true`, and VibeProxy has
 `codex.response-steering: true` for duplex streaming. Astra, Sol, and Luna retain
 their upstream `use_responses_lite: true` defaults.
 
+## Compaction
+
+VibeProxy uses [Codex Compact Bridge](https://github.com/patrick-fu/cpa-codex-compact-bridge)
+v0.2.0: GPT models use native V2 compaction; other models use text summaries.
+The provider name is `OpenAI` to enable native compaction in Codex.
+Cross-provider subagents use `fork_turns="none"` with an explicit task brief.
+Plugin files and config are in `~/.cli-proxy-api`; installs use the Plugin Store.
+
 ## Other custom settings
 
 | Component | Purpose |
