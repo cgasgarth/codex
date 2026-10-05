@@ -15,5 +15,10 @@
 !skills/typescript-lsp/
 !skills/typescript-lsp/**
 
-# Idle compaction source; logs and runtime state remain ignored.
 !model-catalog.json
+!secondwind-plugin/
+!secondwind-plugin/Cargo.toml
+!secondwind-plugin/Cargo.lock
+!secondwind-plugin/README.md
+!secondwind-plugin/src/
+!secondwind-plugin/src/lib.rs

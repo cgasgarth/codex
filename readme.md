@@ -68,5 +68,6 @@ Plugin files and config are in `~/.cli-proxy-api`; installs use the Plugin Store
 
 | Component | Purpose |
 | --- | --- |
+| [Secondwind](secondwind-plugin/README.md) | Native VibeProxy plugin; one shared lossless compressor for tool outputs; no offloading or extra service |
 | `agents/` | Named Fable, Opus, and Gemini roles through VibeProxy |
 | [AGENTS.md](AGENTS.md) | Global engineering and communication instructions |

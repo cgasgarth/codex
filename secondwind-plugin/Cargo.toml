@@ -1,0 +1,16 @@
+[package]
+name = "cpa-secondwind"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+base64 = "0.22"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order", "arbitrary_precision"] }
+secondwind-optimize = { git = "https://github.com/orchetron/secondwind", rev = "ab3888a4bbc43ec1ce080b2e29a3861a7cb5eaeb", features = ["tiktoken"] }
+
+[profile.release]
+strip = "none"
