@@ -25,7 +25,7 @@ codex:
   optimize-multi-agent-v2: true
 ```
 
-**The only VibeProxy change is this built-in configuration flag.** No proxy
+**The V2 compatibility fix uses this built-in configuration flag.** No proxy
 code, Codex binary, or app bundle is patched. It removes task-encryption
 annotations, adapts the upstream namespace, and normalizes inter-agent messages.
 
@@ -48,6 +48,12 @@ codex features disable multi_agent_v2
 perl -pi -e 's/"multi_agent_version": "v1"/"multi_agent_version": "v2"/g' ~/.codex/model-catalog.json
 codex features enable multi_agent_v2
 ```
+
+## Streaming
+
+The Codex credential has `websockets: true`, and VibeProxy has
+`codex.response-steering: true` for duplex streaming. Astra, Sol, and Luna retain
+their upstream `use_responses_lite: true` defaults.
 
 ## Other custom settings
 
