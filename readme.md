@@ -66,6 +66,32 @@ Cross-provider subagents use `fork_turns="none"` with an explicit task brief.
 Plugin files and config are in `~/.cli-proxy-api`. The bridge has a local patch;
 a Plugin Store update can replace it until the fix is included upstream.
 
+## Claude tool discovery
+
+Opus and Fable use `tool_mode: code_mode_only` and `supports_search_tool: true`.
+Discovery keeps the full tool catalog out of each request. Restart the app after
+catalog changes; existing chats use the updated settings when resumed.
+
+VibeProxy loads the upstream [Codex Tool Search Shim prototype](https://github.com/router-for-me/CLIProxyAPI/pull/6140)
+v0.4.1, source `cf11b0bebd0722369e1b8e44f6ed4b6360b64750`. It maps Codex's
+client search protocol to Claude tools and restores discovered tool identities.
+The source was built against the current v8 SDK by changing its v7 imports to v8;
+no CLIProxyAPI or VibeProxy version is pinned. Live Opus HTTP and WebSocket
+search/call/result checks passed.
+
+Plugin config in `~/.cli-proxy-api/config.yaml` and `merged-config.yaml`:
+
+```yaml
+codex-tool-search-shim:
+  enabled: true
+  priority: 200
+  bridge_models: [claude-opus-5-5, claude-fable-5-1]
+```
+
+For rollback, disable this plugin in the management UI and set
+`supports_search_tool` to `false` on both Claude catalog entries, then restart
+the app. This restores the full catalog and its large context cost.
+
 ## Other custom settings
 
 | Component | Purpose |
