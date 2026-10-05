@@ -12,7 +12,8 @@ flowchart LR
 ```
 
 App and CLI share `config.toml`: Sol 6.1, high effort, priority tier, and VibeProxy.
-[model-catalog.json](model-catalog.json) stores model names and context limits.
+[model-catalog.json](model-catalog.json) sets all models to a 350k-token context
+limit, with normal compaction at 315k tokens.
 Terminal `codex` forwards to the app's official bundled CLI.
 
 ## V2 compatibility
@@ -59,6 +60,5 @@ their upstream `use_responses_lite: true` defaults.
 
 | Component | Purpose |
 | --- | --- |
-| [Idle compaction](idle-compact/README.md) | Compacts eligible chats after 25 idle minutes when the latest request exceeds 100k tokens; requires the app to be running |
 | `agents/` | Named Fable, Opus, and Gemini roles through VibeProxy |
 | [AGENTS.md](AGENTS.md) | Global engineering and communication instructions |

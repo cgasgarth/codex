@@ -16,8 +16,4 @@
 !skills/typescript-lsp/**
 
 # Idle compaction source; logs and runtime state remain ignored.
-!idle-compact/
-!idle-compact/*.ts
-!idle-compact/README.md
-!idle-compact/*.plist
 !model-catalog.json
