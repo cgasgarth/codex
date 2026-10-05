@@ -3,6 +3,8 @@
 !.gitignore
 !AGENTS.md
 !readme.md
+!bin/
+!bin/codex
 !skills/
 !skills/amazon-support-browser/
 !skills/amazon-support-browser/**

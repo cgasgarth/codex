@@ -6,13 +6,13 @@ installed=$("$app_cli" --version)
 built=$(cat "$patch_dir/version.txt" 2>/dev/null || true)
 if [ -f "$patch_dir/disabled" ]; then
   unset CODEX_V2_PLAINTEXT
-  exec "$app_cli" -c 'features.multi_agent_v2.enabled=false' "$@"
+  exec "$app_cli" "$@"
 fi
 if [ "$installed" != "$built" ] || [ ! -x "$patch_dir/bin/codex-patched" ]; then
   /Users/cgas/.bun/bin/bun "$patch_dir/rebuild.ts" --background
   echo "Updating plaintext V2 in the background; using the bundled backend for this launch. See $patch_dir/update.log" >&2
   unset CODEX_V2_PLAINTEXT
-  exec "$app_cli" -c 'features.multi_agent_v2.enabled=false' "$@"
+  exec "$app_cli" "$@"
 fi
 export CODEX_V2_PLAINTEXT=1
 exec "$patch_dir/bin/codex-patched" \

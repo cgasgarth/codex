@@ -1,0 +1,2 @@
+#!/bin/sh
+exec "$HOME/.codex/patches/v2-plaintext/bin/codex" "$@"

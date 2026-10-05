@@ -4,15 +4,16 @@
 
 ```mermaid
 flowchart LR
-    App[ChatGPT app] --> Patch[Patched V2 backend]
-    CLI[Standard Codex CLI · V1] --> Proxy
-    Patch --> Proxy[VibeProxy · localhost:8318]
+    App[ChatGPT app] --> Launcher[Shared launcher · V2 plaintext]
+    CLI[Codex CLI] --> Launcher
+    Launcher --> Proxy[VibeProxy · localhost:8318]
     Proxy --> OpenAI
     Proxy --> Claude
 ```
 
 OpenAI and Claude both use VibeProxy. The default is Sol 6.1, high effort,
-priority tier. Settings live in `config.toml`; model names, context limits, and
+priority tier. App and CLI use the same launcher and settings in `config.toml`;
+model names, context limits, and
 compaction thresholds live in [model-catalog.json](model-catalog.json).
 
 VibeProxy must be running and authenticated. Its overrides live in
@@ -28,23 +29,23 @@ chain through the app-server API. Old encrypted history is not decrypted.
 
 | Launch / update | Behavior |
 | --- | --- |
-| App startup | A login LaunchAgent sets `CODEX_CLI_PATH` to the external launcher |
-| Activation | Fully quit and reopen the app; live UI execution still needs verification |
+| Startup | The app uses `CODEX_CLI_PATH`; terminal `codex` uses `~/.codex/bin/codex`. Both call the same launcher |
+| Activation | Reopen the terminal and fully quit/reopen the app |
 | App update | Automatically applies the patch, builds, and checks app-server startup in the background |
 | While updating / on failure | Uses the bundled backend with V1 defaults; details in `patches/v2-plaintext/update.log` |
-| Update ready | The next app launch uses the new patched backend |
+| Update ready | The next app or CLI launch uses the new patched backend |
 
 ```sh
-# Disable the patch, then fully quit and reopen the app.
+# Disable for app and CLI; fully quit and reopen the app.
 ~/.codex/patches/v2-plaintext/disable.sh
 
-# Enable it again, then fully quit and reopen the app.
+# Enable for both again; fully quit and reopen the app.
 ~/.codex/patches/v2-plaintext/enable.sh
 ```
 
 Automatic checks use no model tokens. If the patch no longer applies or startup
 fails, it is not activated. See the [patch guide](patches/v2-plaintext/README.md)
-for details. The standard CLI retains V1.
+for details. Both use the saved V1 defaults while the patch is disabled or updating.
 
 ## Other custom settings
 

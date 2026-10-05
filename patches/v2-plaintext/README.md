@@ -1,4 +1,4 @@
-# Plaintext V2 backend for the ChatGPT app
+# Shared plaintext V2 backend for the app and CLI
 
 Built from official OpenAI Codex `rust-v0.160.0`, with a two-file source patch.
 No third-party fork or app-bundle modification is used.
@@ -12,8 +12,11 @@ through Codex's existing plaintext delivery path. V2 coordination stays intact.
 This disables encryption of delegated instructions for this backend. TLS and
 provider authentication are unchanged. Tasks become readable in local rollouts.
 
-The saved global model catalog remains V1. The app launcher overrides that
-setting for its process and children. The ordinary installed CLI is unchanged.
+The saved global model catalog remains V1. The shared launcher overrides that
+setting with V2 for both the app and terminal CLI, including their children.
+`~/.codex/bin/codex` forwards to this launcher; both `.zprofile` and `.zshrc`
+put that directory first in PATH. The old CLI-only `--yolo` alias is removed;
+approval and sandbox defaults come from the same `config.toml` for both.
 Old encrypted records are not decrypted by this patch.
 
 ## App launch and updates
@@ -31,7 +34,7 @@ and V2 configuration. Only a passing candidate replaces the installed patch.
 
 The build runs in the background because the app has a startup timeout. Until
 it passes, or if it fails, app launches use the bundled backend with V1 defaults.
-The next app launch uses a ready patched update. The updater does not restart
+The next app or CLI launch uses a ready patched update. The updater does not restart
 the app or interrupt existing chats. Concurrent launches share one build.
 Details are in `update.log` and `build.log`.
 
@@ -57,7 +60,8 @@ To disable the override:
 ~/.codex/patches/v2-plaintext/disable.sh
 ```
 
-Then fully quit and reopen the app. Its saved model catalog selects V1 again for
+The same command disables the CLI patch immediately for new invocations.
+Fully quit and reopen the app. The saved model catalog selects V1 again for
 new chats; existing chats can retain saved V2 metadata. The disable command also
 prevents an in-flight update from activating. To enable the launcher again:
 
