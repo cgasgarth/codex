@@ -43,16 +43,7 @@ bun ~/.codex/patches/v2-plaintext/rebuild.ts
 
 Source changes may require updating the patch. Builds use `dev-small`, the
 installed Rust toolchain, and macOS Command Line Tools. Automatic checks make no
-model requests. The full mixed-model probes remain manual:
-
-```sh
-bun ~/.codex/patches/v2-plaintext/verify-cli.ts
-bun ~/.codex/patches/v2-plaintext/verify-app-server.ts
-```
-
-These probes create isolated config and history under `build/probes`. They copy
-local authentication into directories with restricted access. Their raw output
-stays local and is ignored by Git.
+model requests. There is no model-test suite or model-test script.
 
 To launch explicitly after fully quitting the app:
 
@@ -88,5 +79,5 @@ prevents an in-flight update from activating. To enable the launcher again:
 The live desktop UI has not yet been restarted on this backend. App-server
 success is backend integration evidence, not desktop UI acceptance.
 
-Local test source and raw evidence are under:
+Historical raw evidence is under:
 `/Users/cgas/Documents/Codex/2026-09-29/is-s/work/v2-plaintext/`.

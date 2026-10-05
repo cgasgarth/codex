@@ -43,8 +43,8 @@ chain through the app-server API. Old encrypted history is not decrypted.
 ```
 
 Automatic checks use no model tokens. If the patch no longer applies or startup
-fails, it is not activated. Full GPT/Claude tests remain available manually in
-the [patch guide](patches/v2-plaintext/README.md). The standard CLI retains V1.
+fails, it is not activated. See the [patch guide](patches/v2-plaintext/README.md)
+for details. The standard CLI retains V1.
 
 ## Other custom settings
 
