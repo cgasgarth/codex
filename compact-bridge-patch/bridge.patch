@@ -1,0 +1,172 @@
+diff --git i/integration/replay_replacement_test.go w/integration/replay_replacement_test.go
+new file mode 100644
+index 0000000..4a58e1d
+--- /dev/null
++++ w/integration/replay_replacement_test.go
+@@ -0,0 +1,47 @@
++package integration
++
++import (
++	"encoding/json"
++	"github.com/gorilla/websocket"
++	"net/http"
++	"strings"
++	"testing"
++)
++
++func TestWebSocketCompactReplayReplacesOldHistory(t *testing.T) {
++	h := newHarness(t)
++	conn, _, err := websocket.DefaultDialer.Dial("ws"+strings.TrimPrefix(h.baseURL, "http")+"/v1/responses", http.Header{"Authorization": {"Bearer " + accessKey}})
++	if err != nil {
++		t.Fatal(err)
++	}
++	defer conn.Close()
++	send := func(payload any) []string {
++		t.Helper()
++		if err := conn.WriteJSON(payload); err != nil {
++			t.Fatal(err)
++		}
++		return readWSEvents(t, conn)
++	}
++	first := send(map[string]any{"type": "response.create", "model": bridgeModel, "input": []any{map[string]any{"type": "message", "role": "user", "content": "OLD_HISTORY_SENTINEL"}}})
++	compact := send(map[string]any{"type": "response.create", "model": bridgeModel, "previous_response_id": completedResponseID(first), "input": []any{map[string]any{"type": "compaction_trigger"}}})
++	var event struct {
++		Item json.RawMessage `json:"item"`
++	}
++	if err := json.Unmarshal([]byte(compact[0]), &event); err != nil {
++		t.Fatal(err)
++	}
++	check := func() {
++		t.Helper()
++		calls := h.upstream.snapshot()
++		body := string(calls[len(calls)-1].Body)
++		if strings.Contains(body, "OLD_HISTORY_SENTINEL") || strings.Count(body, "fixture compact summary") != 1 {
++			t.Fatalf("compacted replay must replace old history and keep one summary; got %s", body)
++		}
++	}
++	continued := send(map[string]any{"type": "response.create", "model": bridgeModel, "input": []any{event.Item, map[string]any{"type": "message", "role": "user", "content": "Continue from summary"}}})
++	check()
++	for range 2 {
++		continued = send(map[string]any{"type": "response.create", "model": bridgeModel, "previous_response_id": completedResponseID(continued), "input": []any{map[string]any{"type": "message", "role": "user", "content": "Next step"}}})
++		check()
++	}
++}
+diff --git i/plugin/main.go w/plugin/main.go
+index 651e67c..839bec8 100644
+--- i/plugin/main.go
++++ w/plugin/main.go
+@@ -212,10 +212,9 @@ func handleModelRoute(request []byte) ([]byte, error) {
+ 	})
+ }
+ 
+-// shouldBridgeRoute leaves ordinary streaming turns on CPA's built-in path.
+-// Their replay state is normalized later by RequestInterceptor. Only a V2
+-// trigger needs the executor; non-streaming requests stay routed so V1's
+-// Alt-only compact endpoint can be recognized later by the executor.
++// Keep compact replay on the same executor as its compact turn. CPA uses that
++// executor identity to replace WebSocket history instead of merging stale input.
++// Other streaming turns stay on CPA's built-in path.
+ func shouldBridgeRoute(req pluginapi.ModelRouteRequest) bool {
+ 	if !req.Stream {
+ 		return true
+@@ -224,12 +223,13 @@ func shouldBridgeRoute(req pluginapi.ModelRouteRequest) bool {
+ 	if !ok {
+ 		return false
+ 	}
+-	return detectV2Trigger(items)
++	return detectV2Trigger(items) || hasCompactionItems(items)
+ }
+ 
+ // rpcExecutorRequest mirrors pluginapi.ExecutorRequest with HostCallbackID.
+ type rpcExecutorRequest struct {
+ 	pluginapi.ExecutorRequest
++	StreamID       string `json:"stream_id,omitempty"`
+ 	HostCallbackID string `json:"host_callback_id,omitempty"`
+ }
+ 
+@@ -253,12 +253,6 @@ func handleExecute(request []byte, stream bool) ([]byte, error) {
+ 	if stream && detectV2TriggerFromRequest(req.OriginalRequest) {
+ 		return executeV2Compact(cfg, req, decision)
+ 	}
+-	if stream {
+-		// Streaming replay normalization is performed by the request interceptor
+-		// after CPA has built its WebSocket transcript. Reaching this executor for
+-		// any other stream would otherwise require a nested stream callback.
+-		return nil, &pluginErr{Code: errCodeCompactBridgeFailed, Message: "unexpected ordinary streaming bridge request", HTTPStatus: http.StatusBadGateway}
+-	}
+ 	// Ordinary turn on a bridged model: replay-normalize then delegate.
+ 	return executeOrdinaryBridged(req, stream)
+ }
+@@ -363,6 +357,9 @@ func executeOrdinaryBridged(req rpcExecutorRequest, stream bool) ([]byte, error)
+ 
+ // delegateOrdinary delegates a request to CPA via host.model callback.
+ func delegateOrdinary(req rpcExecutorRequest, stream bool) ([]byte, error) {
++	if stream {
++		return delegateOrdinaryStream(req)
++	}
+ 	resp, err := callHostModelExecute(hostModelExecutionRequest{
+ 		EntryProtocol:  "openai-response",
+ 		ExitProtocol:   "openai-response",
+diff --git i/plugin/replay_stream.go w/plugin/replay_stream.go
+new file mode 100644
+index 0000000..4525b71
+--- /dev/null
++++ w/plugin/replay_stream.go
+@@ -0,0 +1,57 @@
++package main
++
++import (
++	"encoding/json"
++	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginabi"
++	"github.com/router-for-me/CLIProxyAPI/v7/sdk/pluginapi"
++)
++
++// Relay compacted continuations without buffering the model's response.
++// The host owns cancellation and closes both streams when the client disconnects.
++func delegateOrdinaryStream(req rpcExecutorRequest) ([]byte, error) {
++	raw, err := callHost(pluginabi.MethodHostModelExecuteStream, hostModelExecutionRequest{
++		EntryProtocol: "openai-response", ExitProtocol: "openai-response", Model: req.Model,
++		Stream: true, Body: req.OriginalRequest, Headers: headerToMap(req.Headers),
++		Query: valuesToMap(req.Query), Alt: req.Alt, HostCallbackID: req.HostCallbackID,
++	})
++	if err != nil {
++		return nil, err
++	}
++	var upstream pluginapi.HostModelStreamResponse
++	if err := json.Unmarshal(raw, &upstream); err != nil {
++		return nil, err
++	}
++	go func() {
++		failure := ""
++		defer func() {
++			_, _ = callHost(pluginabi.MethodHostModelStreamClose, pluginapi.HostModelStreamCloseRequest{StreamID: upstream.StreamID})
++			_, _ = callHost(pluginabi.MethodHostStreamClose, map[string]any{"stream_id": req.StreamID, "error": failure})
++		}()
++		for {
++			raw, err := callHost(pluginabi.MethodHostModelStreamRead, pluginapi.HostModelStreamReadRequest{StreamID: upstream.StreamID})
++			if err != nil {
++				failure = err.Error()
++				return
++			}
++			var chunk pluginapi.HostModelStreamReadResponse
++			if err := json.Unmarshal(raw, &chunk); err != nil {
++				failure = err.Error()
++				return
++			}
++			if chunk.Error != "" {
++				failure = chunk.Error
++				return
++			}
++			if len(chunk.Payload) > 0 {
++				if _, err := callHost(pluginabi.MethodHostStreamEmit, map[string]any{"stream_id": req.StreamID, "payload": chunk.Payload}); err != nil {
++					failure = err.Error()
++					return
++				}
++			}
++			if chunk.Done {
++				return
++			}
++		}
++	}()
++	return okEnvelope(map[string]any{"Headers": upstream.Headers})
++}
