@@ -66,6 +66,7 @@ try {
   const result = { rootId, dir, turnStatus: turn.status, artifact, data, passed: turn.status === "completed" && data?.nonce === nonce && data?.computed === 42 };
   await Bun.write(resolve(dir, "result.json"), JSON.stringify(result, null, 2));
   console.log(JSON.stringify(result));
+  if (!result.passed) process.exitCode = 1;
 } finally {
   clearTimeout(timeout);
   processHandle.stdin.end();

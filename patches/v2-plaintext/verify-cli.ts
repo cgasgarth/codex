@@ -65,3 +65,4 @@ Wait for all children to finish. For each child, call send_message with text "AU
   return result;
 }));
 await Bun.write(resolve(base, `probe-results-${run}.json`), JSON.stringify(results, null, 2));
+if (results.some(result => result.status !== "fulfilled" || !result.value.passed)) process.exitCode = 1;
