@@ -6,6 +6,7 @@
 </style>
 <main><header><h1>Secondwind</h1><button id="refresh">Refresh</button></header>
 <p>Lossless inline compression of tool outputs.</p>
+<div class="card"><div class="label">Estimated API savings · USD</div><div class="number saved" id="cost">—</div></div>
 <div class="cards">
 <div class="card"><div class="label">Tokens removed</div><div class="number saved" id="saved">—</div></div>
 <div class="card"><div class="label">Token reduction</div><div class="number" id="reduction">—</div></div>
@@ -15,11 +16,14 @@
 <dl><dt>Tool-output tokens before</dt><dd id="before">—</dd><dt>Tool-output tokens after</dt><dd id="after">—</dd><dt>Outputs checked</dt><dd id="checked">—</dd><dt>Requests checked</dt><dd id="total">—</dd></dl>
 <dl><dt>Median rewrite time</dt><dd id="median">—</dd><dt>p99 rewrite time</dt><dd id="p99">—</dd></dl>
 <p>Rewrite time per changed request includes JSON parsing, compressor wait, compression, and JSON encoding. It excludes the model response.</p>
+<table style="width:100%;text-align:left;border-spacing:0 12px"><thead><tr><th>Model</th><th>Tokens removed</th><th>Input / 1M tokens</th><th>Est. savings</th></tr></thead><tbody id="models"></tbody></table>
+<p id="pricing"></p>
+<p>API equivalent at standard uncached input prices; OpenAI rates use short context (≤272k). Excludes cache discounts, cache writes, fast mode, long-context and regional premiums. Unpriced models are excluded from the USD total. This is not a reduction in your subscription bill.</p>
 <p id="status" role="status">Loading metrics…</p>
 <p>Since this plugin version loaded. Counts include resent tool outputs and retries.<br>Token counts use cl100k, so they estimate model token savings. These are not billing savings. Counters reset when the plugin reloads.</p>
 </main>
 <script>
-const endpoint=__STATS_URL__, $=id=>document.getElementById(id), fmt=n=>Number(n).toLocaleString();
+const endpoint=__STATS_URL__, $=id=>document.getElementById(id), fmt=n=>Number(n).toLocaleString(), usd=n=>Number(n).toLocaleString('en-US',{style:'currency',currency:'USD',minimumFractionDigits:4,maximumFractionDigits:4});
 function savedKey(){
  const raw=localStorage.getItem('cli-proxy-auth');if(!raw)return '';
  let decoded=raw;
@@ -37,6 +41,14 @@ async function refresh(){
   for(const [id,value]of Object.entries({saved,before:m.tokens_before,after:m.tokens_after,outputs:m.rewritten_outputs,requests:m.rewritten_requests,checked:m.outputs,total:m.requests}))$(id).textContent=fmt(value);
   $('reduction').textContent=m.tokens_before?(100*saved/m.tokens_before).toFixed(1)+'%':'0%';
   for(const [id,value]of Object.entries({median:m.rewrite_median_ms,p99:m.rewrite_p99_ms}))$(id).textContent=value==null?'—':value.toLocaleString(undefined,{maximumFractionDigits:3})+' ms';
+  $('cost').textContent=usd(m.estimated_savings_usd);
+  $('models').replaceChildren(...m.model_savings.map(row=>{
+   const tr=document.createElement('tr');
+   for(const text of [row.model,fmt(row.saved_tokens),row.input_usd_per_million==null?'Unpriced':usd(row.input_usd_per_million),row.estimated_savings_usd==null?'—':usd(row.estimated_savings_usd)]){const td=document.createElement('td');td.textContent=text;tr.append(td);}
+   return tr;
+  }));
+  $('pricing').textContent='Public prices checked '+m.prices_checked_on+' · '+fmt(m.unpriced_saved_tokens)+' tokens removed on unpriced models. Sources: ';
+  m.price_sources.forEach((url,i)=>{const a=document.createElement('a');a.href=url;a.textContent=i?'Anthropic':'OpenAI';a.style.color='inherit';$('pricing').append(a,' ');});
   $('status').textContent='Updated '+new Date().toLocaleTimeString();
  }catch(error){$('status').textContent=error.message;}
 }

@@ -4,6 +4,7 @@ use secondwind_optimize::{tokens::Tiktoken, Optimizer, Outcome};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
+    collections::BTreeMap,
     ffi::{c_char, c_void, CStr},
     ptr, slice,
     sync::{Arc, Mutex, OnceLock},
@@ -25,6 +26,22 @@ struct Metrics {
     rewritten_outputs: u64,
     tokens_before: u64,
     tokens_after: u64,
+    #[serde(skip)]
+    saved_tokens_by_model: BTreeMap<String, u64>,
+}
+
+#[derive(Deserialize)]
+struct InputPrices {
+    checked_on: String,
+    sources: Vec<String>,
+    usd_per_million_tokens: BTreeMap<String, f64>,
+}
+
+fn input_prices() -> &'static InputPrices {
+    static PRICES: OnceLock<InputPrices> = OnceLock::new();
+    PRICES.get_or_init(|| {
+        serde_json::from_str(include_str!("input-prices.json")).expect("public input prices")
+    })
 }
 // Secondwind's Transform trait lacks Send. This instance contains only its built-in
 // owned transforms and the thread-safe tokenizer; all access is under this mutex.
@@ -91,6 +108,9 @@ fn rewrite(body: &[u8]) -> Result<Option<Vec<u8>>, String> {
         rewrite_latency,
     } = &mut *guard;
     metrics.requests += 1;
+    let model = request["model"].as_str().unwrap_or("unknown").to_owned();
+    let tokens_before = metrics.tokens_before;
+    let tokens_after = metrics.tokens_after;
     if let Some(model) = request["model"].as_str() {
         optimizer.set_model(model);
     }
@@ -121,6 +141,9 @@ fn rewrite(body: &[u8]) -> Result<Option<Vec<u8>>, String> {
     if changed {
         let body = serde_json::to_vec(&request).map_err(|e| e.to_string())?;
         metrics.rewritten_requests += 1;
+        let saved = (metrics.tokens_before - tokens_before)
+            .saturating_sub(metrics.tokens_after - tokens_after);
+        *metrics.saved_tokens_by_model.entry(model).or_default() += saved;
         rewrite_latency
             .record(started.elapsed().as_micros().max(1) as u64)
             .map_err(|e| e.to_string())?;
@@ -140,7 +163,7 @@ fn dispatch(method: &str, request: &[u8]) -> Result<Value, String> {
     match method {
         "plugin.register" | "plugin.reconfigure" => Ok(json!({
             "schema_version": 1,
-            "metadata": {"Name": "Secondwind", "Version": "0.3.0", "Author": "cgasgarth", "GitHubRepository": "https://github.com/cgasgarth/codex"},
+            "metadata": {"Name": "Secondwind", "Version": "0.4.0", "Author": "cgasgarth", "GitHubRepository": "https://github.com/cgasgarth/codex"},
             "capabilities": {"request_interceptor": true, "management_api": true}
         })),
         "management.register" => {
@@ -162,6 +185,24 @@ fn dispatch(method: &str, request: &[u8]) -> Result<Value, String> {
             {
                 let guard = compressor().lock().map_err(|e| e.to_string())?;
                 let mut stats = serde_json::to_value(&guard.metrics).map_err(|e| e.to_string())?;
+                let prices = input_prices();
+                let mut savings = 0.0;
+                let mut unpriced_tokens = 0;
+                let models: Vec<Value> = guard.metrics.saved_tokens_by_model.iter().map(|(model, tokens)| {
+                    let rate = prices.usd_per_million_tokens.get(model);
+                    let estimate = rate.map(|rate| *tokens as f64 * rate / 1_000_000.0);
+                    if let Some(estimate) = estimate {
+                        savings += estimate;
+                    } else {
+                        unpriced_tokens += tokens;
+                    }
+                    json!({"model": model, "saved_tokens": tokens, "input_usd_per_million": rate, "estimated_savings_usd": estimate})
+                }).collect();
+                stats["estimated_savings_usd"] = json!(savings);
+                stats["unpriced_saved_tokens"] = json!(unpriced_tokens);
+                stats["model_savings"] = json!(models);
+                stats["prices_checked_on"] = json!(prices.checked_on);
+                stats["price_sources"] = json!(prices.sources);
                 for (field, quantile) in [("rewrite_median_ms", 0.5), ("rewrite_p99_ms", 0.99)] {
                     stats[field] = if guard.rewrite_latency.is_empty() {
                         Value::Null
