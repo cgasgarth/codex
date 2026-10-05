@@ -27,7 +27,8 @@ codex:
 
 It removes task-encryption annotations, adapts the upstream namespace, and
 normalizes inter-agent messages. `features.multi_agent_v2.enabled = true` in
-`config.toml` enables V2 for both app and CLI. No custom backend or updater is
+`config.toml` enables V2 for both app and CLI. Catalog entries also advertise V2
+so children receive collaboration tools. No custom backend or updater is
 needed. App updates retain their official signed backend; the proxy setting
 persists independently. VibeProxy must be running and authenticated.
 
@@ -37,9 +38,11 @@ retain saved protocol/history; use fresh chats when checking compatibility.
 
 ```sh
 # Switch both app and CLI to V1 defaults; restart the app afterward.
+perl -pi -e 's/"multi_agent_version": "v2"/"multi_agent_version": "v1"/g' ~/.codex/model-catalog.json
 codex features disable multi_agent_v2
 
 # Enable V2 again; restart the app afterward.
+perl -pi -e 's/"multi_agent_version": "v1"/"multi_agent_version": "v2"/g' ~/.codex/model-catalog.json
 codex features enable multi_agent_v2
 ```
 
