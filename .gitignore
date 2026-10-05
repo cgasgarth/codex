@@ -2,6 +2,7 @@
 *
 !.gitignore
 !AGENTS.md
+!readme.md
 !skills/
 !skills/amazon-support-browser/
 !skills/amazon-support-browser/**
