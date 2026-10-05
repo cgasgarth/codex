@@ -59,10 +59,12 @@ their upstream `use_responses_lite: true` defaults.
 ## Compaction
 
 VibeProxy uses [Codex Compact Bridge](https://github.com/patrick-fu/cpa-codex-compact-bridge)
-v0.2.0: GPT models use native V2 compaction; other models use text summaries.
+v0.2.0 with a [local replay fix](compact-bridge-patch/README.md): GPT models use
+native V2 compaction; other models use text summaries.
 The provider name is `OpenAI` to enable native compaction in Codex.
 Cross-provider subagents use `fork_turns="none"` with an explicit task brief.
-Plugin files and config are in `~/.cli-proxy-api`; installs use the Plugin Store.
+Plugin files and config are in `~/.cli-proxy-api`. The bridge has a local patch;
+a Plugin Store update can replace it until the fix is included upstream.
 
 ## Other custom settings
 
