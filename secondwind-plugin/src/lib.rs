@@ -1,4 +1,5 @@
 use base64::{engine::general_purpose::STANDARD, Engine};
+use hdrhistogram::Histogram;
 use secondwind_optimize::{tokens::Tiktoken, Optimizer, Outcome};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -6,12 +7,14 @@ use std::{
     ffi::{c_char, c_void, CStr},
     ptr, slice,
     sync::{Arc, Mutex, OnceLock},
+    time::Instant,
 };
 
 // One compressor for the entire proxy. The lock protects Secondwind's mutable API.
 struct SharedCompressor {
     optimizer: Optimizer,
     metrics: Metrics,
+    rewrite_latency: Histogram<u64>,
 }
 
 #[derive(Default, Serialize)]
@@ -36,6 +39,7 @@ fn compressor() -> &'static Mutex<SharedCompressor> {
         Mutex::new(SharedCompressor {
             optimizer,
             metrics: Metrics::default(),
+            rewrite_latency: Histogram::new(3).expect("rewrite latency histogram"),
         })
     })
 }
@@ -78,9 +82,14 @@ fn compress_content(value: &mut Value, optimizer: &mut Optimizer, metrics: &mut 
 }
 
 fn rewrite(body: &[u8]) -> Result<Option<Vec<u8>>, String> {
+    let started = Instant::now();
     let mut request: Value = serde_json::from_slice(body).map_err(|e| e.to_string())?;
     let mut guard = compressor().lock().map_err(|e| e.to_string())?;
-    let SharedCompressor { optimizer, metrics } = &mut *guard;
+    let SharedCompressor {
+        optimizer,
+        metrics,
+        rewrite_latency,
+    } = &mut *guard;
     metrics.requests += 1;
     if let Some(model) = request["model"].as_str() {
         optimizer.set_model(model);
@@ -110,10 +119,12 @@ fn rewrite(body: &[u8]) -> Result<Option<Vec<u8>>, String> {
         }
     }
     if changed {
+        let body = serde_json::to_vec(&request).map_err(|e| e.to_string())?;
         metrics.rewritten_requests += 1;
-        serde_json::to_vec(&request)
-            .map(Some)
-            .map_err(|e| e.to_string())
+        rewrite_latency
+            .record(started.elapsed().as_micros().max(1) as u64)
+            .map_err(|e| e.to_string())?;
+        Ok(Some(body))
     } else {
         Ok(None)
     }
@@ -129,7 +140,7 @@ fn dispatch(method: &str, request: &[u8]) -> Result<Value, String> {
     match method {
         "plugin.register" | "plugin.reconfigure" => Ok(json!({
             "schema_version": 1,
-            "metadata": {"Name": "Secondwind", "Version": "0.2.1", "Author": "cgasgarth", "GitHubRepository": "https://github.com/cgasgarth/codex"},
+            "metadata": {"Name": "Secondwind", "Version": "0.3.0", "Author": "cgasgarth", "GitHubRepository": "https://github.com/cgasgarth/codex"},
             "capabilities": {"request_interceptor": true, "management_api": true}
         })),
         "management.register" => {
@@ -150,7 +161,15 @@ fn dispatch(method: &str, request: &[u8]) -> Result<Value, String> {
                 .is_some_and(|p| p.ends_with("/stats"))
             {
                 let guard = compressor().lock().map_err(|e| e.to_string())?;
-                let body = serde_json::to_vec(&guard.metrics).map_err(|e| e.to_string())?;
+                let mut stats = serde_json::to_value(&guard.metrics).map_err(|e| e.to_string())?;
+                for (field, quantile) in [("rewrite_median_ms", 0.5), ("rewrite_p99_ms", 0.99)] {
+                    stats[field] = if guard.rewrite_latency.is_empty() {
+                        Value::Null
+                    } else {
+                        json!(guard.rewrite_latency.value_at_quantile(quantile) as f64 / 1000.0)
+                    };
+                }
+                let body = serde_json::to_vec(&stats).map_err(|e| e.to_string())?;
                 Ok(management_response("application/json", body))
             } else {
                 let endpoint = STATS_URL.get().ok_or("Management API not registered")?;

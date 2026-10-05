@@ -13,6 +13,8 @@
 <div class="card"><div class="label">Requests rewritten</div><div class="number" id="requests">—</div></div>
 </div>
 <dl><dt>Tool-output tokens before</dt><dd id="before">—</dd><dt>Tool-output tokens after</dt><dd id="after">—</dd><dt>Outputs checked</dt><dd id="checked">—</dd><dt>Requests checked</dt><dd id="total">—</dd></dl>
+<dl><dt>Median rewrite time</dt><dd id="median">—</dd><dt>p99 rewrite time</dt><dd id="p99">—</dd></dl>
+<p>Rewrite time per changed request includes JSON parsing, compressor wait, compression, and JSON encoding. It excludes the model response.</p>
 <p id="status" role="status">Loading metrics…</p>
 <p>Since this plugin version loaded. Counts include resent tool outputs and retries.<br>Token counts use cl100k, so they estimate model token savings. These are not billing savings. Counters reset when the plugin reloads.</p>
 </main>
@@ -34,6 +36,7 @@ async function refresh(){
   const m=await response.json(),saved=Math.max(0,m.tokens_before-m.tokens_after);
   for(const [id,value]of Object.entries({saved,before:m.tokens_before,after:m.tokens_after,outputs:m.rewritten_outputs,requests:m.rewritten_requests,checked:m.outputs,total:m.requests}))$(id).textContent=fmt(value);
   $('reduction').textContent=m.tokens_before?(100*saved/m.tokens_before).toFixed(1)+'%':'0%';
+  for(const [id,value]of Object.entries({median:m.rewrite_median_ms,p99:m.rewrite_p99_ms}))$(id).textContent=value==null?'—':value.toLocaleString(undefined,{maximumFractionDigits:3})+' ms';
   $('status').textContent='Updated '+new Date().toLocaleTimeString();
  }catch(error){$('status').textContent=error.message;}
 }

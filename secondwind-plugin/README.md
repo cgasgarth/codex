@@ -9,7 +9,7 @@ keeps routing, streaming, credentials, and compaction.
 
 Build with `cargo build --release`. The Secondwind revision is pinned in
 `Cargo.toml`. Install `target/release/libcpa_secondwind.dylib` as
-`~/.cli-proxy-api/plugins/darwin/arm64/cpa-secondwind-v0.2.1.dylib` while the plugin
+`~/.cli-proxy-api/plugins/darwin/arm64/cpa-secondwind-v0.3.0.dylib` while the plugin
 is disabled, then enable `plugins.configs.cpa-secondwind.enabled` in VibeProxy.
 The config is `~/.cli-proxy-api/config.yaml`; the running proxy reads
 `merged-config.yaml`.
@@ -20,3 +20,7 @@ The **Secondwind** sidebar page shows token estimates and rewrite counts since
 plugin load. It loads once when opened; use **Refresh** to update the counts.
 It uses the management center's saved login. Counts include retries and resent tool outputs; they are not billing
 savings. Counters reset when the plugin reloads.
+
+Median and p99 rewrite time cover each changed request: JSON parsing, compressor
+wait, compression, and JSON encoding. They exclude model response time. A shared
+histogram tracks the percentiles without storing individual samples.
