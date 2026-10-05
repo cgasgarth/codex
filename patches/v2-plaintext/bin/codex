@@ -1,0 +1,18 @@
+#!/bin/sh
+set -eu
+patch_dir=$(CDPATH= cd -P -- "$(dirname -- "$0")/.." && pwd)
+app_cli=/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex
+installed=$("$app_cli" --version)
+built=$(cat "$patch_dir/version.txt")
+if [ "$installed" != "$built" ]; then
+  echo "Plaintext V2 backend was built for $built; the app ships $installed. Run: bun $patch_dir/rebuild.ts" >&2
+  exit 1
+fi
+export CODEX_V2_PLAINTEXT=1
+exec "$patch_dir/bin/codex-patched" \
+  -c 'features.multi_agent_v2.enabled=true' \
+  -c 'features.multi_agent_v2.tool_namespace="agents"' \
+  -c 'features.multi_agent_v2.hide_spawn_agent_metadata=false' \
+  -c 'features.multi_agent_v2.expose_spawn_agent_model_overrides=true' \
+  -c 'features.multi_agent_v2.non_code_mode_only=false' \
+  "$@"

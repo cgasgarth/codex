@@ -1,0 +1,4 @@
+bin/codex-patched
+bin/codex-code-mode-host
+build/
+build.log

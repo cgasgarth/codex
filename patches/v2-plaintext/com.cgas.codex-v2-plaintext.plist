@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.cgas.codex-v2-plaintext</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/launchctl</string>
+    <string>setenv</string>
+    <string>CODEX_CLI_PATH</string>
+    <string>/Users/cgas/.codex/patches/v2-plaintext/bin/codex</string>
+  </array>
+  <key>RunAtLoad</key><true/>
+</dict>
+</plist>
