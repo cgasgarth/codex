@@ -1,8 +1,0 @@
-bin/codex-patched*
-bin/codex-code-mode-host
-build/
-build.log
-update.log
-update-state.json
-version.txt.next
-disabled

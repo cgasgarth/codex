@@ -4,56 +4,49 @@
 
 ```mermaid
 flowchart LR
-    App[ChatGPT app] --> Launcher[Shared launcher · V2 plaintext]
-    CLI[Codex CLI] --> Launcher
-    Launcher --> Proxy[VibeProxy · localhost:8318]
+    App[ChatGPT app] --> Codex[Official signed Codex · V2]
+    CLI[Codex CLI] --> Codex
+    Codex --> Proxy[VibeProxy · localhost:8318]
     Proxy --> OpenAI
     Proxy --> Claude
 ```
 
-OpenAI and Claude both use VibeProxy. The default is Sol 6.1, high effort,
-priority tier. App and CLI use the same launcher and settings in `config.toml`;
-model names, context limits, and
-compaction thresholds live in [model-catalog.json](model-catalog.json).
+App and CLI share `config.toml`: Sol 6.1, high effort, priority tier, and VibeProxy.
+[model-catalog.json](model-catalog.json) stores model names and context limits.
+Terminal `codex` forwards to the app's official bundled CLI.
 
-VibeProxy must be running and authenticated. Its overrides live in
-`~/.cli-proxy-api/config.yaml`. Client → proxy supports WebSockets; Claude's
-upstream connection uses HTTP/SSE.
+## V2 compatibility
 
-## Plaintext V2 patch
+VibeProxy's installed CLIProxyAPI 8.0.4 supports this setting in
+`~/.cli-proxy-api/config.yaml`:
 
-Stock V2 encrypts delegated tasks that Claude cannot read. Our two-file patch
-requests plaintext for spawn, messages, and follow-ups while retaining V2
-coordination. GPT ↔ Claude tests passed, including a nested GPT → Opus → GPT
-chain through the app-server API. Old encrypted history is not decrypted.
-
-| Launch / update | Behavior |
-| --- | --- |
-| Startup | The app uses `CODEX_CLI_PATH`; terminal `codex` uses `~/.codex/bin/codex`. Both call the same launcher |
-| Activation | Reopen the terminal and fully quit/reopen the app |
-| App update | Automatically applies the patch, builds, and checks app-server startup in the background |
-| While updating / on failure | Uses the bundled backend with V1 defaults; details in `patches/v2-plaintext/update.log` |
-| Update ready | The next app or CLI launch uses the new patched backend |
-
-```sh
-# Disable for app and CLI; fully quit and reopen the app.
-~/.codex/patches/v2-plaintext/disable.sh
-
-# Enable for both again; fully quit and reopen the app.
-~/.codex/patches/v2-plaintext/enable.sh
+```yaml
+codex:
+  optimize-multi-agent-v2: true
 ```
 
-Automatic checks use no model tokens. If the patch no longer applies or startup
-fails, it is not activated. See the [patch guide](patches/v2-plaintext/README.md)
-for details. Both use the saved V1 defaults while the patch is disabled or updating.
+It removes task-encryption annotations, adapts the upstream namespace, and
+normalizes inter-agent messages. `features.multi_agent_v2.enabled = true` in
+`config.toml` enables V2 for both app and CLI. No custom backend or updater is
+needed. App updates retain their official signed backend; the proxy setting
+persists independently. VibeProxy must be running and authenticated.
+
+The previous locally compiled backend broke the app's native tools because
+macOS rejected its signing identity. It has been retired. Existing chats can
+retain saved protocol/history; use fresh chats when checking compatibility.
+
+```sh
+# Switch both app and CLI to V1 defaults; restart the app afterward.
+codex features disable multi_agent_v2
+
+# Enable V2 again; restart the app afterward.
+codex features enable multi_agent_v2
+```
 
 ## Other custom settings
 
 | Component | Purpose |
 | --- | --- |
-| [Idle compaction](idle-compact/README.md) | Login service; compacts eligible chats after 25 idle minutes when the latest request exceeds 100k tokens |
+| [Idle compaction](idle-compact/README.md) | Compacts eligible chats after 25 idle minutes when the latest request exceeds 100k tokens; requires the app to be running |
 | `agents/` | Named Fable, Opus, and Gemini roles through VibeProxy |
 | [AGENTS.md](AGENTS.md) | Global engineering and communication instructions |
-
-Idle compaction requires the app to be running. It uses a private desktop
-interface, so app updates can affect it.

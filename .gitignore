@@ -21,17 +21,3 @@
 !idle-compact/README.md
 !idle-compact/*.plist
 !model-catalog.json
-
-# Targeted V2 plaintext backend patch; binaries and build output remain local.
-!patches/
-!patches/v2-plaintext/
-!patches/v2-plaintext/.gitignore
-!patches/v2-plaintext/*.patch
-!patches/v2-plaintext/*.ts
-!patches/v2-plaintext/*.sh
-!patches/v2-plaintext/*.md
-!patches/v2-plaintext/*.json
-!patches/v2-plaintext/*.plist
-!patches/v2-plaintext/version.txt
-!patches/v2-plaintext/bin/
-!patches/v2-plaintext/bin/codex

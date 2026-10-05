@@ -1,2 +1,2 @@
 #!/bin/sh
-exec "$HOME/.codex/patches/v2-plaintext/bin/codex" "$@"
+exec /Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex "$@"
