@@ -68,7 +68,9 @@ a Plugin Store update can replace it until the fix is included upstream.
 
 ## Claude tool discovery
 
-Opus and Fable use `tool_mode: code_mode_only` and `supports_search_tool: true`.
+Opus and Fable share Sol’s instruction templates and app/skill/plugin usage flags,
+with Claude model identities. They use `tool_mode: code_mode_only` and
+`supports_search_tool: true`.
 Discovery keeps the full tool catalog out of each request. Restart the app after
 catalog changes; existing chats use the updated settings when resumed.
 
