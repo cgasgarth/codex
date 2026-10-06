@@ -5,6 +5,9 @@
 !readme.md
 !bin/
 !bin/codex
+!bin/sync-model-messages.py
+!launchagents/
+!launchagents/com.cgas.codex-startup.plist
 !skills/
 !skills/amazon-support-browser/
 !skills/amazon-support-browser/**

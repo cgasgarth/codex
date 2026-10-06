@@ -1,2 +1,4 @@
 #!/bin/sh
+set -eu
+"$HOME/.local/bin/uv" run --no-project "$HOME/.codex/bin/sync-model-messages.py"
 exec /Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex "$@"

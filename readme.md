@@ -14,7 +14,9 @@ flowchart LR
 App and CLI share `config.toml`: Sol 6.1, high effort, priority tier, and VibeProxy.
 [model-catalog.json](model-catalog.json) sets all models to a 350k-token context
 limit, with normal compaction at 315k tokens.
-Terminal `codex` forwards to the app's official bundled CLI.
+App and terminal `codex` use [bin/codex](bin/codex), which syncs Claude messages
+before it starts the app's official bundled CLI. The login LaunchAgent sets
+`CODEX_CLI_PATH` to this launcher; it exits after setting the variable.
 
 ## V2 compatibility
 
@@ -59,8 +61,12 @@ a Plugin Store update can replace it until the fix is included upstream.
 
 ## Claude tool discovery
 
-Opus and Fable use copies of Sol’s instruction templates and matching
-app/skill/plugin usage flags, with Claude model identities. They use `tool_mode: code_mode_only` and
+On each backend/CLI start, [sync-model-messages.py](bin/sync-model-messages.py)
+copies `model_messages` and the app/skill/plugin usage flags from the
+`gpt-6.1-sol` entry in `model-catalog.json` into Opus and Fable. Sol's identity
+text is copied too. It writes only when values differ. Updates to Sol's entry
+therefore reach Claude automatically on the next start; it does not download
+new Sol templates. They use `tool_mode: code_mode_only` and
 `supports_search_tool: true`.
 Discovery keeps the full tool catalog out of each request. Restart the app after
 catalog changes; existing chats use the updated settings when resumed.
