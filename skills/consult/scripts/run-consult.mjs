@@ -269,13 +269,14 @@ export async function enableImageMode(tab, aspectRatio) {
 }
 
 const THINKING_LEVELS = new Map([
-  ["instant", { label: "Instant", power: 0 }],
-  ["medium", { label: "Medium", power: 1 }],
-  ["high", { label: "High", power: 2 }],
-  ["extra high", { label: "Extra High", power: 3 }],
-  ["extra-high", { label: "Extra High", power: 3 }],
-  ["pro", { label: "6 Pro", power: 4 }],
+  ["instant", { label: "Instant", status: "Instant", power: 0 }],
+  ["medium", { label: "Medium", status: "Medium", power: 1 }],
+  ["high", { label: "High", status: "High", power: 2 }],
+  ["extra high", { label: "Extra High", status: "Extra High", power: 3 }],
+  ["extra-high", { label: "Extra High", status: "Extra High", power: 3 }],
+  ["pro", { label: "6 Pro", status: "Pro", power: 4 }],
 ]);
+const PRO_MODEL = "6 Pro";
 
 function normalizeThinkingLevel(value) {
   const normalizedValue = String(value).normalize("NFKC").trim().toLowerCase();
@@ -286,22 +287,82 @@ function normalizeThinkingLevel(value) {
   return { value: normalizedValue === "extra high" ? "extra-high" : normalizedValue, ...level };
 }
 
-export async function ensureThinkingLevel(tab, thinkingLevel = "pro") {
-  const requested = normalizeThinkingLevel(thinkingLevel);
-  const control = tab.playwright.getByRole("button", { name: "Select ChatGPT model", exact: true });
+function compactText(value) {
+  return String(value ?? "").replace(/\s+/g, " ").trim();
+}
+
+function modelSelector(tab) {
+  return {
+    control: tab.playwright.getByRole("button", { name: "Select ChatGPT model", exact: true }),
+    menu: tab.playwright.getByRole("menu", { name: "Select ChatGPT model", exact: true }),
+  };
+}
+
+// Reads the open selector. The status text ("Pro, 5 of 5.") is ChatGPT's own
+// announcement of the effort that the next message will use.
+async function readOpenSelector(tab, menu) {
+  const status = await requireOne(menu.locator('[role="status"]'), "thinking-level status");
+  const slider = await requireOne(tab.playwright.locator('[role="slider"]'), "thinking-level power slider");
+  const model = menu.locator('[role="menuitem"][aria-label="Select model"]');
+  return {
+    status: compactText(await status.innerText()).replace(/,.*$/, ""),
+    power: Number(await slider.getAttribute("aria-valuenow")),
+    model: await model.count() === 1 ? compactText(await model.innerText()) : null,
+  };
+}
+
+async function openSelector(tab) {
+  const { control, menu } = modelSelector(tab);
   await (await requireOne(control, "model and thinking selector")).click();
   await tab.playwright.domSnapshot();
-  const menu = tab.playwright.getByRole("menu", { name: "Select ChatGPT model", exact: true });
   await menu.waitFor({ state: "visible", timeoutMs: 5000 });
+  return { control, menu };
+}
+
+async function closeSelector(tab, control, menu) {
+  await control.click();
+  await tab.playwright.domSnapshot();
+  if (await visible(menu)) throw new Error("The model selector did not close.");
+}
+
+function selectionMatches(requested, observed) {
+  return observed.power === requested.power
+    && observed.status === requested.status
+    && (requested.value !== "pro" || observed.model === PRO_MODEL);
+}
+
+function selectionResult(requested, observed) {
+  return { thinkingLevel: requested.value, mode: observed.status, model: observed.model, power: observed.power };
+}
+
+// Read-only check of the composer's current model and thinking level.
+export async function readThinkingLevel(tab) {
+  const { control, menu } = await openSelector(tab);
+  const observed = await readOpenSelector(tab, menu);
+  await closeSelector(tab, control, menu);
+  return observed;
+}
+
+export async function verifyThinkingLevel(tab, thinkingLevel = "pro") {
+  const requested = normalizeThinkingLevel(thinkingLevel);
+  const observed = await readThinkingLevel(tab);
+  if (!selectionMatches(requested, observed)) {
+    throw new Error(`Expected ${requested.label}; the selector shows ${JSON.stringify(observed)}.`);
+  }
+  return selectionResult(requested, observed);
+}
+
+export async function ensureThinkingLevel(tab, thinkingLevel = "pro") {
+  const requested = normalizeThinkingLevel(thinkingLevel);
+  const { control, menu } = await openSelector(tab);
   // The power slider has aria-hidden=true; its DOM role is still keyboard operable.
-  let slider = tab.playwright.locator('[role="slider"]');
-  await requireOne(slider, "thinking-level power slider");
+  let slider = await requireOne(tab.playwright.locator('[role="slider"]'), "thinking-level power slider");
   if (Number(await slider.getAttribute("aria-valuenow")) !== requested.power) {
-    await (await requireOne(slider, "thinking-level power slider")).press("Home");
+    await slider.press("Home");
     for (let power = 0; power < requested.power; power += 1) {
       await tab.playwright.domSnapshot();
-      slider = tab.playwright.locator('[role="slider"]');
-      await (await requireOne(slider, "thinking-level power slider")).press("ArrowRight");
+      slider = await requireOne(tab.playwright.locator('[role="slider"]'), "thinking-level power slider");
+      await slider.press("ArrowRight");
     }
     await tab.playwright.domSnapshot();
   }
@@ -320,22 +381,36 @@ export async function ensureThinkingLevel(tab, thinkingLevel = "pro") {
     if (await latestRadio.getAttribute("aria-checked") !== "true") {
       throw new Error("Latest Pro model was not selected.");
     }
-    const modelPicker = tab.playwright.locator('[role="menuitem"][aria-label="Select model"]');
-    await requireOne(modelPicker, "selected model label");
-    if ((await modelPicker.innerText()).replace(/\s+/g, "") !== "6Pro") {
-      throw new Error("The selected Latest model is not 6 Pro.");
-    }
   }
-  slider = tab.playwright.locator('[role="slider"]');
-  if (Number(await slider.getAttribute("aria-valuenow")) !== requested.power) {
-    throw new Error(`${requested.label} power was not selected.`);
-  }
-  await control.click();
-  await tab.playwright.domSnapshot();
-  if (await visible(menu)) throw new Error("The model selector did not close.");
 
-  if (requested.value !== "pro") return { thinkingLevel: requested.value, mode: requested.label };
-  return { thinkingLevel: requested.value, mode: "Pro", model: "GPT-6" };
+  const observed = await readOpenSelector(tab, menu);
+  if (!selectionMatches(requested, observed)) {
+    throw new Error(`${requested.label} was not selected; the selector shows ${JSON.stringify(observed)}.`);
+  }
+  await closeSelector(tab, control, menu);
+  return selectionResult(requested, observed);
+}
+
+// Proves which model produced the latest completed answer. The visible
+// selector is a global setting and does not prove the model of an earlier
+// answer. The "Regenerate response" button opens a menu ("Try again • 6 Pro")
+// and does not regenerate until a menu item is chosen.
+export async function verifyAnswerModel(tab, expectedModel = PRO_MODEL) {
+  await tab.playwright.domSnapshot();
+  const buttons = tab.playwright.getByRole("button", { name: "Regenerate response", exact: true });
+  if (await buttons.count() === 0) return { status: "answer_not_complete" };
+  await buttons.last().click();
+  await tab.playwright.domSnapshot();
+  const tryAgain = tab.playwright.getByRole("menuitem").filter({ hasText: /Try again/ });
+  let label;
+  try {
+    label = compactText(await (await requireOne(tryAgain, "Try again menu item")).innerText());
+  } finally {
+    await tab.pressKey(null, "Escape");
+    await tab.playwright.domSnapshot();
+  }
+  const model = compactText(label.split("•")[1]);
+  return { status: model === expectedModel ? "verified" : "model_mismatch", model, expectedModel };
 }
 
 export async function startConsult({ iab, project, prompt, paths = [], send = true, createImage = false, aspectRatio = null, thinkingLevel = "pro", attachGitHub = true, maxUploadBytes }) {
@@ -373,7 +448,6 @@ export async function startConsult({ iab, project, prompt, paths = [], send = tr
     const imageMode = createImage
       ? await enableImageMode(tab, aspectRatio)
       : { promptPrefix: "" };
-    const modelSelection = await ensureThinkingLevel(tab, thinkingLevel);
     const box = await composer(tab, opened.composerName);
     await attachPreparedFiles(tab, prepared);
 
@@ -385,11 +459,13 @@ export async function startConsult({ iab, project, prompt, paths = [], send = tr
       githubAttached: attachGitHub,
       attachments: prepared.sources,
       chatSurface: surfaceSelection.chatSurface,
-      ...modelSelection,
+      ...await ensureThinkingLevel(tab, thinkingLevel),
       tab,
     };
 
     await box.type(`${imageMode.promptPrefix}${prompt}`);
+    // Select after typing: the last selector change before send decides the model.
+    const modelSelection = await ensureThinkingLevel(tab, thinkingLevel);
 
     if (attachGitHub) {
       const githubPill = box.getByText("GitHub", { exact: true });
@@ -397,6 +473,7 @@ export async function startConsult({ iab, project, prompt, paths = [], send = tr
     }
     await sendCurrentComposer(tab);
     await tab.playwright.waitForURL("**/c/**", { timeoutMs: 15000 });
+    const afterSend = await verifyThinkingLevel(tab, thinkingLevel);
 
     return {
       status: "sent",
@@ -407,6 +484,7 @@ export async function startConsult({ iab, project, prompt, paths = [], send = tr
       attachments: prepared.sources,
       chatSurface: surfaceSelection.chatSurface,
       ...modelSelection,
+      afterSend,
       tab,
       url: await conversationUrl(tab),
     };
@@ -427,8 +505,9 @@ export async function startConsult({ iab, project, prompt, paths = [], send = tr
   }
 }
 
-export async function sendToExistingConsult({ session, tab = session?.tab, paths = [], prompt = "", send = true, maxUploadBytes }) {
+export async function sendToExistingConsult({ session, tab = session?.tab, paths = [], prompt = "", send = true, thinkingLevel = "pro", maxUploadBytes }) {
   if (!tab) throw new Error("An existing consult session or tab is required.");
+  thinkingLevel = normalizeThinkingLevel(thinkingLevel).value;
   if (!prompt && (typeof paths === "string" ? !paths : paths.length === 0)) {
     throw new Error("Provide at least one attachment path or a prompt for the existing session.");
   }
@@ -446,10 +525,14 @@ export async function sendToExistingConsult({ session, tab = session?.tab, paths
       url: await conversationUrl(tab),
     };
 
+    const modelSelection = await ensureThinkingLevel(tab, thinkingLevel);
     await sendCurrentComposer(tab);
+    const afterSend = await verifyThinkingLevel(tab, thinkingLevel);
     return {
       status: "sent_to_existing_session",
       attachments: prepared.sources,
+      ...modelSelection,
+      afterSend,
       tab,
       url: await conversationUrl(tab),
     };
@@ -458,7 +541,7 @@ export async function sendToExistingConsult({ session, tab = session?.tab, paths
   }
 }
 
-export async function sendExpectedExistingDraft({ session, tab = session?.tab, expectedPrompt }) {
+export async function sendExpectedExistingDraft({ session, tab = session?.tab, expectedPrompt, thinkingLevel = "pro" }) {
   if (!tab) throw new Error("An existing consult session or tab is required.");
   if (!expectedPrompt) throw new Error("An expected prompt is required.");
   const box = await activeConversationComposer(tab);
@@ -467,8 +550,10 @@ export async function sendExpectedExistingDraft({ session, tab = session?.tab, e
   if (normalizeVisibleText(existingText) !== normalizeVisibleText(expectedPrompt)) {
     throw new Error("The staged ChatGPT draft does not exactly match the expected prompt; refusing to send it.");
   }
+  const modelSelection = await ensureThinkingLevel(tab, thinkingLevel);
   await sendCurrentComposer(tab);
-  return { status: "sent_expected_existing_draft", tab, url: await conversationUrl(tab) };
+  const afterSend = await verifyThinkingLevel(tab, thinkingLevel);
+  return { status: "sent_expected_existing_draft", ...modelSelection, afterSend, tab, url: await conversationUrl(tab) };
 }
 
 export function publicResult(session) {
