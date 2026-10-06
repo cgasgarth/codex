@@ -1,5 +1,6 @@
-"""Copy Sol's messages to Claude before Codex reads the model catalog."""
+"""Set shared instructions for non-OpenAI models before Codex loads its catalog."""
 
+import copy
 import json
 import os
 import tempfile
@@ -9,6 +10,9 @@ catalog_path = Path(__file__).resolve().parents[1] / "model-catalog.json"
 catalog = json.loads(catalog_path.read_text())
 models = {model["slug"]: model for model in catalog["models"]}
 sol = models["gpt-6.1-sol"]
+shared_messages = copy.deepcopy(sol["model_messages"])
+_, instruction_body = shared_messages["instructions_template"].split(". ", 1)
+shared_messages["instructions_template"] = "You are Codex, a coding agent. " + instruction_body
 fields = (
     "model_messages",
     "include_apps_usage_instructions",
@@ -16,11 +20,13 @@ fields = (
     "include_skills_usage_instructions",
 )
 changed = False
-for slug in ("claude-opus-5-5", "claude-fable-5-1"):
-    model = models[slug]
+for slug, model in models.items():
+    if slug.startswith(("gpt-", "codex-")):
+        continue
     for field in fields:
-        if model.get(field) != sol[field]:
-            model[field] = sol[field]
+        value = shared_messages if field == "model_messages" else sol[field]
+        if model.get(field) != value:
+            model[field] = value
             changed = True
 
 if changed:

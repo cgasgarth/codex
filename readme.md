@@ -62,11 +62,12 @@ a Plugin Store update can replace it until the fix is included upstream.
 ## Claude tool discovery
 
 On each backend/CLI start, [sync-model-messages.py](bin/sync-model-messages.py)
-copies `model_messages` and the app/skill/plugin usage flags from the
-`gpt-6.1-sol` entry in `model-catalog.json` into Opus and Fable. Sol's identity
-text is copied too. It writes only when values differ. Updates to Sol's entry
-therefore reach Claude automatically on the next start; it does not download
-new Sol templates. They use `tool_mode: code_mode_only` and
+copies Sol's `model_messages` and app/skill/plugin usage flags to non-OpenAI
+catalog entries. The opening sentence becomes “You are Codex, a coding agent.”
+OpenAI entries (`gpt-*` and `codex-*`) keep their original messages. It writes
+only when values differ. Changes to Sol's catalog entry reach the shared default
+on the next start; it does not download new Sol templates.
+Opus and Fable use `tool_mode: code_mode_only` and
 `supports_search_tool: true`.
 Discovery keeps the full tool catalog out of each request. Restart the app after
 catalog changes; existing chats use the updated settings when resumed.
