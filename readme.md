@@ -20,12 +20,13 @@ before it starts the app's official bundled CLI. The login LaunchAgent sets
 
 ## V2 compatibility
 
-VibeProxy's installed CLIProxyAPI 8.0.4 supports this setting in
+VibeProxy uses this setting in
 `~/.cli-proxy-api/config.yaml`:
 
 ```yaml
-codex:
-  optimize-multi-agent-v2: true
+client:
+  codex:
+    optimize-multi-agent-v2: true
 ```
 
 **The V2 compatibility fix uses this built-in configuration flag.** No proxy
@@ -45,9 +46,9 @@ retain saved protocol/history; use fresh chats when checking compatibility.
 
 ## Streaming
 
-The Codex credential has `websockets: true`, and VibeProxy has
-`codex.response-steering: true` for duplex streaming. Astra, Sol, and Luna retain
-their upstream `use_responses_lite: true` defaults.
+The Codex credential has `websockets: true`. Experimental duplex response
+steering stays off with `upstream.codex.response-steering: false`.
+Astra, Sol, and Luna retain their upstream `use_responses_lite: true` defaults.
 
 ## Compaction
 
