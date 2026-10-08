@@ -6,6 +6,8 @@ use serde_json::{json, Value};
 use std::{
     collections::BTreeMap,
     ffi::{c_char, c_void, CStr},
+    fs,
+    path::{Path, PathBuf},
     ptr, slice,
     sync::{Arc, Mutex, OnceLock},
     time::Instant,
@@ -16,9 +18,11 @@ struct SharedCompressor {
     optimizer: Optimizer,
     metrics: Metrics,
     rewrite_latency: Histogram<u64>,
+    metrics_path: Option<PathBuf>,
+    persistence_error: Option<String>,
 }
 
-#[derive(Default, Serialize)]
+#[derive(Default, Serialize, Deserialize)]
 struct Metrics {
     requests: u64,
     rewritten_requests: u64,
@@ -26,8 +30,41 @@ struct Metrics {
     rewritten_outputs: u64,
     tokens_before: u64,
     tokens_after: u64,
-    #[serde(skip)]
     saved_tokens_by_model: BTreeMap<String, u64>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct SavedMetrics {
+    metrics: Metrics,
+    rewrite_latency: Vec<(u64, u64)>,
+}
+
+fn load_metrics(path: &Path) -> Result<(Metrics, Histogram<u64>), String> {
+    let mut latency = Histogram::new(3).map_err(|e| e.to_string())?;
+    let bytes = match fs::read(path) {
+        Ok(bytes) => bytes,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            return Ok((Metrics::default(), latency));
+        }
+        Err(e) => return Err(e.to_string()),
+    };
+    let saved: SavedMetrics = serde_json::from_slice(&bytes).map_err(|e| e.to_string())?;
+    for (value, count) in saved.rewrite_latency {
+        latency.record_n(value, count).map_err(|e| e.to_string())?;
+    }
+    Ok((saved.metrics, latency))
+}
+
+fn save_metrics(path: &Path, metrics: &Metrics, latency: &Histogram<u64>) -> Result<(), String> {
+    let buckets: Vec<_> = latency
+        .iter_recorded()
+        .map(|v| (v.value_iterated_to(), v.count_at_value()))
+        .collect();
+    let bytes = serde_json::to_vec(&json!({"metrics": metrics, "rewrite_latency": buckets}))
+        .map_err(|e| e.to_string())?;
+    let temp = path.with_extension("json.tmp");
+    fs::write(&temp, bytes).map_err(|e| e.to_string())?;
+    fs::rename(temp, path).map_err(|e| e.to_string())
 }
 
 #[derive(Deserialize)]
@@ -53,10 +90,31 @@ fn compressor() -> &'static Mutex<SharedCompressor> {
     COMPRESSOR.get_or_init(|| {
         let mut optimizer = Optimizer::default().with_counter(Arc::new(Tiktoken::cl100k()));
         optimizer.set_offload_allowed(false);
+        let path = std::env::var_os("HOME")
+            .map(|home| PathBuf::from(home).join(".cli-proxy-api/secondwind-metrics.json"));
+        let loaded = path
+            .as_ref()
+            .ok_or_else(|| "HOME is unset".to_owned())
+            .and_then(|path| load_metrics(path));
+        let (metrics, rewrite_latency, metrics_path, persistence_error) = match loaded {
+            Ok((metrics, latency)) => (metrics, latency, path, None),
+            Err(error) => {
+                eprintln!("secondwind: metrics could not be loaded: {error}");
+                // Preserve an unreadable file; compression can continue without overwriting it.
+                (
+                    Metrics::default(),
+                    Histogram::new(3).expect("rewrite latency histogram"),
+                    None,
+                    Some(error),
+                )
+            }
+        };
         Mutex::new(SharedCompressor {
             optimizer,
-            metrics: Metrics::default(),
-            rewrite_latency: Histogram::new(3).expect("rewrite latency histogram"),
+            metrics,
+            rewrite_latency,
+            metrics_path,
+            persistence_error,
         })
     })
 }
@@ -106,6 +164,8 @@ fn rewrite(body: &[u8]) -> Result<Option<Vec<u8>>, String> {
         optimizer,
         metrics,
         rewrite_latency,
+        metrics_path,
+        persistence_error,
     } = &mut *guard;
     metrics.requests += 1;
     let model = request["model"].as_str().unwrap_or("unknown").to_owned();
@@ -138,7 +198,7 @@ fn rewrite(body: &[u8]) -> Result<Option<Vec<u8>>, String> {
             }
         }
     }
-    if changed {
+    let result = if changed {
         let body = serde_json::to_vec(&request).map_err(|e| e.to_string())?;
         metrics.rewritten_requests += 1;
         let saved = (metrics.tokens_before - tokens_before)
@@ -147,10 +207,20 @@ fn rewrite(body: &[u8]) -> Result<Option<Vec<u8>>, String> {
         rewrite_latency
             .record(started.elapsed().as_micros().max(1) as u64)
             .map_err(|e| e.to_string())?;
-        Ok(Some(body))
+        Some(body)
     } else {
-        Ok(None)
+        None
+    };
+    if let Some(path) = metrics_path {
+        let error = save_metrics(path, metrics, rewrite_latency).err();
+        if error != *persistence_error {
+            if let Some(error) = &error {
+                eprintln!("secondwind: metrics could not be saved: {error}");
+            }
+        }
+        *persistence_error = error;
     }
+    Ok(result)
 }
 
 #[derive(Deserialize)]
@@ -163,7 +233,7 @@ fn dispatch(method: &str, request: &[u8]) -> Result<Value, String> {
     match method {
         "plugin.register" | "plugin.reconfigure" => Ok(json!({
             "schema_version": 1,
-            "metadata": {"Name": "Secondwind", "Version": "0.4.2", "Author": "cgasgarth", "GitHubRepository": "https://github.com/cgasgarth/codex"},
+            "metadata": {"Name": "Secondwind", "Version": env!("CARGO_PKG_VERSION"), "Author": "cgasgarth", "GitHubRepository": "https://github.com/cgasgarth/codex"},
             "capabilities": {"request_interceptor": true, "management_api": true}
         })),
         "management.register" => {
@@ -185,6 +255,7 @@ fn dispatch(method: &str, request: &[u8]) -> Result<Value, String> {
             {
                 let guard = compressor().lock().map_err(|e| e.to_string())?;
                 let mut stats = serde_json::to_value(&guard.metrics).map_err(|e| e.to_string())?;
+                stats["persistence_error"] = json!(guard.persistence_error);
                 let prices = input_prices();
                 let mut savings = 0.0;
                 let mut unpriced_tokens = 0;
@@ -332,3 +403,44 @@ unsafe extern "C" fn free_buffer(buffer: *mut c_void, len: usize) {
     }
 }
 unsafe extern "C" fn shutdown() {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn metrics_survive_reload_and_file_replacement() {
+        let path = std::env::temp_dir().join(format!(
+            "secondwind-metrics-test-{}.json",
+            std::process::id()
+        ));
+        let (mut metrics, mut latency) = load_metrics(&path).unwrap();
+        metrics.requests = 3;
+        metrics.tokens_before = 1000;
+        metrics.tokens_after = 600;
+        metrics
+            .saved_tokens_by_model
+            .insert("example-model".into(), 400);
+        latency.record_n(125, 2).unwrap();
+        latency.record(9000).unwrap();
+        save_metrics(&path, &metrics, &latency).unwrap();
+        let (mut restored, restored_latency) = load_metrics(&path).unwrap();
+        assert_eq!(restored.requests, 3);
+        assert_eq!(restored.tokens_before - restored.tokens_after, 400);
+        assert_eq!(restored.saved_tokens_by_model["example-model"], 400);
+        assert_eq!(restored_latency.len(), latency.len());
+        for q in [0.5, 0.99] {
+            assert_eq!(
+                restored_latency.value_at_quantile(q),
+                latency.value_at_quantile(q)
+            );
+        }
+        restored.requests += 1;
+        save_metrics(&path, &restored, &restored_latency).unwrap();
+        assert_eq!(load_metrics(&path).unwrap().0.requests, 4);
+        fs::write(&path, b"invalid json").unwrap();
+        assert!(load_metrics(&path).is_err());
+        assert_eq!(fs::read(&path).unwrap(), b"invalid json");
+        fs::remove_file(path).unwrap();
+    }
+}
