@@ -59,7 +59,7 @@ retain saved protocol/history; use fresh chats when checking compatibility.
 ## Streaming
 
 The Codex credential has `websockets: true`. Experimental duplex response
-steering stays off with `upstream.codex.response-steering: false`.
+steering is enabled with `upstream.codex.response-steering: true`.
 Astra, Sol, and Luna retain their upstream `use_responses_lite: true` defaults.
 
 ## Compaction
