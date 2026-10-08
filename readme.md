@@ -17,8 +17,18 @@ with the newer CLI's model-discovery default.
 [model-catalog.json](model-catalog.json) sets all models to a 350k-token context
 limit, with normal compaction at 315k tokens.
 App and terminal `codex` use [bin/codex](bin/codex), which syncs Claude messages
-before it starts the app's official bundled CLI. The login LaunchAgent sets
+before it starts the official signed CLI in `packages/app-server-daemon/current`.
+The login LaunchAgent sets
 `CODEX_CLI_PATH` to this launcher; it exits after setting the variable.
+
+Update the shared CLI and background server on the alpha channel:
+
+```sh
+npm install -g @openai/codex@alpha
+"$(npm prefix -g)/bin/codex" app-server daemon update --from-cli --yes
+```
+
+The desktop app uses the updated CLI after its next restart.
 
 ## V2 compatibility
 
