@@ -56,6 +56,11 @@ macOS rejected its signing identity. It has been retired. Existing chats can
 retain saved protocol/history; use fresh chats when checking compatibility.
 
 
+## Browser control
+
+Codex and Claude use `cua_repl` for Chrome and desktop apps.
+Playwright MCP is not configured.
+
 ## Streaming
 
 The Codex credential has `websockets: true`. Experimental duplex response
