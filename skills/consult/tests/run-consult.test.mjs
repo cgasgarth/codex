@@ -295,10 +295,10 @@ describe("ensureThinkingLevel", () => {
           async count() { return menuOpen ? 1 : 0; },
           async innerText() { return `${stuckStatus ?? statusLabels[power]}, ${power + 1} of 5.`; },
         };
-        expect(selector).toBe('[role="menuitem"][aria-label="Select model"]');
+        expect(selector).toBe('[role="menuitemradio"][aria-checked="true"]');
         return {
           async count() { return menuOpen ? 1 : 0; },
-          async innerText() { return latestSelected ? "6\nPro" : "5.6\nPro"; },
+          async innerText() { return latestSelected ? "GPT-6" : "GPT-5.6 Sol"; },
         };
       },
     };
@@ -322,7 +322,8 @@ describe("ensureThinkingLevel", () => {
           expect(selector).toBe('[role="menuitemradio"]');
           return {
             filter(options) {
-              expect(options.hasText.test("Latest")).toBe(true);
+              expect(options.hasText.test("GPT-6")).toBe(true);
+              expect(options.hasText.test("GPT-6.1")).toBe(false);
               return latestRadio;
             },
           };
@@ -353,31 +354,31 @@ describe("ensureThinkingLevel", () => {
   it("returns the observed selector state, not a hard-coded label", async () => {
     const { tab } = thinkingTab("Medium");
     expect(await ensureThinkingLevel(tab, "medium")).toEqual({
-      thinkingLevel: "medium", mode: "Medium", model: "5.6 Pro", power: 1,
+      thinkingLevel: "medium", mode: "Medium", model: "GPT-5.6 Sol", power: 1,
     });
   });
 
   it("fails when ChatGPT does not announce the requested level", async () => {
     const { tab } = thinkingTab("6 Pro", { stuckStatus: "Medium" });
-    await expect(ensureThinkingLevel(tab, "pro")).rejects.toThrow("6 Pro was not selected");
+    await expect(ensureThinkingLevel(tab, "pro")).rejects.toThrow("GPT-6 Pro was not selected");
   });
 
   it("verifies the current level without changing it", async () => {
     const fixture = thinkingTab("6 Pro");
     expect(await verifyThinkingLevel(fixture.tab, "pro")).toEqual({
-      thinkingLevel: "pro", mode: "Pro", model: "6 Pro", power: 4,
+      thinkingLevel: "pro", mode: "Pro", model: "GPT-6", power: 4,
     });
     expect(fixture.state().powerChanges).toBe(0);
     expect(fixture.state().menuOpen).toBe(false);
-    await expect(verifyThinkingLevel(thinkingTab("Medium").tab, "pro")).rejects.toThrow("Expected 6 Pro");
+    await expect(verifyThinkingLevel(thinkingTab("Medium").tab, "pro")).rejects.toThrow("Expected GPT-6 Pro");
   });
 
-  it("changes an alternate Pro model to 6 Pro and verifies Latest", async () => {
+  it("changes an alternate Pro model to GPT-6 Pro", async () => {
     const {tab, state} = thinkingTab();
     expect(await ensureThinkingLevel(tab, "pro")).toEqual({
       thinkingLevel: "pro",
       mode: "Pro",
-      model: "6 Pro",
+      model: "GPT-6",
       power: 4,
     });
     expect(state()).toEqual({

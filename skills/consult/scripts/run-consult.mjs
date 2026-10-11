@@ -274,9 +274,11 @@ const THINKING_LEVELS = new Map([
   ["high", { label: "High", status: "High", power: 2 }],
   ["extra high", { label: "Extra High", status: "Extra High", power: 3 }],
   ["extra-high", { label: "Extra High", status: "Extra High", power: 3 }],
-  ["pro", { label: "6 Pro", status: "Pro", power: 4 }],
+  ["pro", { label: "GPT-6 Pro", status: "Pro", power: 4 }],
 ]);
-const PRO_MODEL = "6 Pro";
+// The picker names the checked model radio; answers name the model in "Try again • 6 Pro".
+const PRO_MODEL = "GPT-6";
+const PRO_ANSWER_MODEL = "6 Pro";
 
 function normalizeThinkingLevel(value) {
   const normalizedValue = String(value).normalize("NFKC").trim().toLowerCase();
@@ -303,11 +305,11 @@ function modelSelector(tab) {
 async function readOpenSelector(tab, menu) {
   const status = await requireOne(menu.locator('[role="status"]'), "thinking-level status");
   const slider = await requireOne(tab.playwright.locator('[role="slider"]'), "thinking-level power slider");
-  const model = menu.locator('[role="menuitem"][aria-label="Select model"]');
+  const model = menu.locator('[role="menuitemradio"][aria-checked="true"]');
   return {
     status: compactText(await status.innerText()).replace(/,.*$/, ""),
     power: Number(await slider.getAttribute("aria-valuenow")),
-    model: await model.count() === 1 ? compactText(await model.innerText()) : null,
+    model: await model.count() === 1 ? compactText((await model.innerText()).split("\n")[0]) : null,
   };
 }
 
@@ -368,18 +370,18 @@ export async function ensureThinkingLevel(tab, thinkingLevel = "pro") {
   }
 
   if (requested.value === "pro") {
-    const latestRadio = tab.playwright.locator('[role="menuitemradio"]').filter({ hasText: /^Latest$/ });
-    await requireOne(latestRadio, "Latest model option");
-    if (await latestRadio.getAttribute("aria-checked") !== "true") {
-      await latestRadio.press("Space");
+    const proRadio = tab.playwright.locator('[role="menuitemradio"]').filter({ hasText: /^GPT-6$/ });
+    await requireOne(proRadio, "GPT-6 model option");
+    if (await proRadio.getAttribute("aria-checked") !== "true") {
+      await proRadio.press("Space");
       await tab.playwright.domSnapshot();
     }
     if (!await visible(menu)) {
       await control.click();
       await tab.playwright.domSnapshot();
     }
-    if (await latestRadio.getAttribute("aria-checked") !== "true") {
-      throw new Error("Latest Pro model was not selected.");
+    if (await proRadio.getAttribute("aria-checked") !== "true") {
+      throw new Error("GPT-6 Pro model was not selected.");
     }
   }
 
@@ -395,7 +397,7 @@ export async function ensureThinkingLevel(tab, thinkingLevel = "pro") {
 // selector is a global setting and does not prove the model of an earlier
 // answer. The "Regenerate response" button opens a menu ("Try again • 6 Pro")
 // and does not regenerate until a menu item is chosen.
-export async function verifyAnswerModel(tab, expectedModel = PRO_MODEL) {
+export async function verifyAnswerModel(tab, expectedModel = PRO_ANSWER_MODEL) {
   await tab.playwright.domSnapshot();
   const buttons = tab.playwright.getByRole("button", { name: "Regenerate response", exact: true });
   if (await buttons.count() === 0) return { status: "answer_not_complete" };

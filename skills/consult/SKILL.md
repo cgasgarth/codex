@@ -53,7 +53,7 @@ Omit `prompt` to send only the attachments. Pass `send: false` to prepare the ex
 
 Use `send: false` only to validate setup without typing or sending the prompt. When `paths` are supplied, the files remain attached to the unsent draft. For a visual deliverable, use `createImage: true`, set `attachGitHub: false`, and pass the desired aspect-ratio label when needed. ChatGPT image mode and the GitHub plugin cannot remain attached to the same composer. Put the required context in the prompt or `paths`, and omit GitHub-specific instructions. The helper uses ChatGPT's visible ratio control when available and otherwise adds an explicit ratio instruction to the prompt.
 
-`thinkingLevel` defaults to `"pro"`, which selects `Latest`, verifies `6 Pro` in the model picker, and checks the Pro power setting. Only choose a non-pro thinking level (`"instant"`, `"medium"`, `"high"`, or `"extra-high"`) when the user explicitly requests it. `sendToExistingConsult` and `sendExpectedExistingDraft` accept the same `thinkingLevel` (default `"pro"`).
+`thinkingLevel` defaults to `"pro"`, which selects the `GPT-6` model radio, verifies that it is checked in the model picker, and checks the Pro power setting. Only choose a non-pro thinking level (`"instant"`, `"medium"`, `"high"`, or `"extra-high"`) when the user explicitly requests it. `sendToExistingConsult` and `sendExpectedExistingDraft` accept the same `thinkingLevel` (default `"pro"`).
 
 The thinking level is one global ChatGPT setting, shared by all tabs, projects, and chats. A change in another tab or chat changes the selector everywhere, so a selector seen later does not show which model answered. The helper selects the level after it types the prompt, immediately before send, reads back ChatGPT's own status text (for example `Pro, 5 of 5.`) and model label, and fails if they do not match. After send, it reads the selector again and returns that readback as `afterSend`. This proves the setting at send time only; use `verifyAnswerModel` to prove the model of the answer.
 
@@ -87,13 +87,9 @@ When GitHub is attached, the GitHub plugin cannot:
 - Read branches other than `main`.
 - Create milestones.
 
-When GitHub is attached, default to GitHub issues as the persistent outcome. Roughly 95% of consultations should directly create, edit, split, link, or delete issues through the plugin rather than merely return prose or draft issue text. State this outcome explicitly in the prompt:
+ChatGPT can create and edit GitHub issues when issues are the intended output of the task. Issues are not required; when the task needs only an answer, ask for the answer and do not request issue mutations.
 
-```text
-Use the attached GitHub plugin for repository reads and issue mutations. Persist the consultation outcome directly in GitHub by creating, editing, splitting, linking, or deleting the necessary issues; do not only return recommendations or draft issue text.
-```
-
-For issue work when GitHub is attached:
+When the task needs issues:
 
 - Require inspection of `main`, relevant pull requests, and existing issues before mutation.
 - Make each issue PR-sized; split work requiring multiple PRs.
