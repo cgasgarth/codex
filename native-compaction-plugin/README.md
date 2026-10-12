@@ -37,7 +37,8 @@ claude --model gpt-6.1-sol
 ```
 
 The settings contain `ANTHROPIC_BASE_URL=http://127.0.0.1:8318`, a local
-placeholder API key, and a 350k auto-compaction window. Claude Code handles `/compact`
+placeholder API key, and 900k windows for Codex models. Claude models keep
+their default windows. Claude Code handles `/compact`
 and automatic compaction. No Clodex daemon, HTTPS proxy, or startup hook is used.
 The current proxy has no client API-key restriction; use a real proxy key if
 that changes. See `~/.claude/docs/vibeproxy.md` for client setup.
