@@ -70,7 +70,7 @@ Astra, Sol, and Luna retain their upstream `use_responses_lite: true` defaults.
 ## Compaction
 
 GPT models use OpenAI’s native compaction. The
-[Native GPT Compaction plugin](native-compaction-plugin/README.md) adapts
+[Native GPT Compaction plugin](https://github.com/cgasgarth/clodex/tree/main/plugins/native-compaction) adapts
 `/responses/compact` to OpenAI's working in-band trigger; the upstream standalone
 route currently returns 404. It also lets Claude Code use native GPT compaction
 through VibeProxy, with durable checkpoints. Claude models use CPA's built-in
@@ -127,6 +127,6 @@ Use `brew services restart cpa-usage-keeper` to restart or
 | Component | Purpose |
 | --- | --- |
 | [Secondwind](secondwind-plugin/README.md) | One shared lossless tool-output compressor; token savings in its sidebar page; no offloading or extra service |
-| [Native GPT Compaction](native-compaction-plugin/README.md) | Native GPT compact endpoint and Claude Code checkpoint bridge; no extra process |
+| [Native GPT Compaction](https://github.com/cgasgarth/clodex/tree/main/plugins/native-compaction) | Native GPT compact endpoint and Claude Code checkpoint bridge; no extra process |
 | `agents/` | Named Fable, Opus, and Gemini roles through VibeProxy |
 | [AGENTS.md](AGENTS.md) | Global engineering and communication instructions |

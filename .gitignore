@@ -26,9 +26,3 @@
 !secondwind-plugin/src/
 !secondwind-plugin/src/lib.rs
 !secondwind-plugin/src/dashboard.html
-!native-compaction-plugin/
-!native-compaction-plugin/Cargo.toml
-!native-compaction-plugin/Cargo.lock
-!native-compaction-plugin/README.md
-!native-compaction-plugin/src/
-!native-compaction-plugin/src/lib.rs
