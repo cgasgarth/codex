@@ -30,13 +30,14 @@ cpa-native-compaction:
 For rollback, set `enabled: false` in both files. Resume existing checkpoint
 chats only with the plugin enabled; their markers are not text summaries.
 
-For a Claude Code trial, point the client at VibeProxy instead of Clodex:
+Claude Code uses VibeProxy directly through `~/.claude/settings.json`:
 
 ```sh
-ANTHROPIC_BASE_URL=http://127.0.0.1:8318 ANTHROPIC_API_KEY=clodex \
-NO_PROXY=127.0.0.1,localhost CLAUDE_CODE_MAX_CONTEXT_TOKENS=350000 \
 claude --model gpt-6.1-sol
 ```
 
-The current proxy has no client API-key restriction. If you add one, use that
-key. Existing Clodex routing and services remain available during the trial.
+The settings contain `ANTHROPIC_BASE_URL=http://127.0.0.1:8318`, a local
+placeholder API key, and a 350k auto-compaction window. Claude Code handles `/compact`
+and automatic compaction. No Clodex daemon, HTTPS proxy, or startup hook is used.
+The current proxy has no client API-key restriction; use a real proxy key if
+that changes. See `~/.claude/docs/vibeproxy.md` for client setup.
