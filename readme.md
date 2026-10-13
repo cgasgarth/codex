@@ -14,8 +14,8 @@ flowchart LR
 App and CLI share `config.toml`: Sol 6.1, high effort, priority tier, and VibeProxy.
 `features.api_key_model_discovery = true` keeps older background daemons aligned
 with the newer CLI's model-discovery default.
-[model-catalog.json](model-catalog.json) sets all models to a 350k-token context
-limit, with normal compaction at 315k tokens.
+[model-catalog.json](model-catalog.json) sets all models to a 600k-token context
+limit. `config.toml` and the catalog set compaction at 500k tokens.
 App and terminal `codex` use [bin/codex](bin/codex), which syncs Claude messages
 before it starts the official signed CLI in `packages/app-server-daemon/current`.
 The login LaunchAgent sets
