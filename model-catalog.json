@@ -107,8 +107,8 @@
         "limit": 10000
       },
       "supports_image_detail_original": true,
-      "context_window": 500000,
-      "max_context_window": 500000,
+      "context_window": 900000,
+      "max_context_window": 900000,
       "comp_hash": "3000",
       "effective_context_window_percent": 95,
       "experimental_supported_tools": [
@@ -240,8 +240,8 @@
         "limit": 10000
       },
       "supports_image_detail_original": true,
-      "context_window": 500000,
-      "max_context_window": 500000,
+      "context_window": 900000,
+      "max_context_window": 900000,
       "comp_hash": "3000",
       "effective_context_window_percent": 95,
       "experimental_supported_tools": [
@@ -303,8 +303,8 @@
         "limit": 10000
       },
       "supports_image_detail_original": false,
-      "context_window": 500000,
-      "max_context_window": 500000,
+      "context_window": 900000,
+      "max_context_window": 900000,
       "effective_context_window_percent": 95,
       "experimental_supported_tools": [],
       "input_modalities": [
@@ -412,8 +412,8 @@
         "limit": 10000
       },
       "supports_image_detail_original": false,
-      "context_window": 500000,
-      "max_context_window": 500000,
+      "context_window": 900000,
+      "max_context_window": 900000,
       "effective_context_window_percent": 95,
       "experimental_supported_tools": [],
       "input_modalities": [
@@ -549,8 +549,8 @@
         "limit": 10000
       },
       "supports_image_detail_original": true,
-      "context_window": 500000,
-      "max_context_window": 500000,
+      "context_window": 900000,
+      "max_context_window": 900000,
       "comp_hash": "3000",
       "effective_context_window_percent": 95,
       "experimental_supported_tools": [],
@@ -674,8 +674,8 @@
         "limit": 10000
       },
       "supports_image_detail_original": true,
-      "context_window": 500000,
-      "max_context_window": 500000,
+      "context_window": 900000,
+      "max_context_window": 900000,
       "comp_hash": "3000",
       "effective_context_window_percent": 95,
       "experimental_supported_tools": [
@@ -773,8 +773,8 @@
         "limit": 10000
       },
       "supports_image_detail_original": true,
-      "context_window": 500000,
-      "max_context_window": 500000,
+      "context_window": 900000,
+      "max_context_window": 900000,
       "comp_hash": "3000",
       "effective_context_window_percent": 95,
       "experimental_supported_tools": [],
@@ -865,8 +865,8 @@
         "limit": 10000
       },
       "supports_image_detail_original": true,
-      "context_window": 500000,
-      "max_context_window": 500000,
+      "context_window": 900000,
+      "max_context_window": 900000,
       "comp_hash": "3000",
       "effective_context_window_percent": 95,
       "experimental_supported_tools": [],
@@ -953,8 +953,8 @@
         "limit": 10000
       },
       "supports_image_detail_original": true,
-      "context_window": 500000,
-      "max_context_window": 500000,
+      "context_window": 900000,
+      "max_context_window": 900000,
       "comp_hash": "3000",
       "effective_context_window_percent": 95,
       "experimental_supported_tools": [],
@@ -1038,8 +1038,8 @@
         "limit": 10000
       },
       "supports_image_detail_original": true,
-      "context_window": 500000,
-      "max_context_window": 500000,
+      "context_window": 900000,
+      "max_context_window": 900000,
       "comp_hash": "2911",
       "effective_context_window_percent": 95,
       "experimental_supported_tools": [],
@@ -1116,8 +1116,8 @@
         "limit": 10000
       },
       "supports_image_detail_original": true,
-      "context_window": 500000,
-      "max_context_window": 500000,
+      "context_window": 900000,
+      "max_context_window": 900000,
       "comp_hash": "2911",
       "effective_context_window_percent": 95,
       "experimental_supported_tools": [],
@@ -1191,8 +1191,8 @@
         "limit": 10000
       },
       "supports_image_detail_original": false,
-      "context_window": 500000,
-      "max_context_window": 500000,
+      "context_window": 900000,
+      "max_context_window": 900000,
       "comp_hash": "2911",
       "effective_context_window_percent": 95,
       "experimental_supported_tools": [],
@@ -1286,8 +1286,8 @@
         "limit": 10000
       },
       "supports_image_detail_original": true,
-      "context_window": 500000,
-      "max_context_window": 500000,
+      "context_window": 900000,
+      "max_context_window": 900000,
       "comp_hash": "3000",
       "effective_context_window_percent": 95,
       "experimental_supported_tools": [],
