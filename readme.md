@@ -130,7 +130,7 @@ Use `brew services restart cpa-usage-keeper` to restart or
 
 | Component | Purpose |
 | --- | --- |
-| [Secondwind](secondwind-plugin/README.md) | One shared lossless tool-output compressor; token savings in its sidebar page; no offloading or extra service |
+| [Secondwind](secondwind-plugin/README.md) | One shared lossless compressor for user JSON and structured tool results; persistent savings dashboard; no offloading or extra service |
 | [Native GPT Compaction](https://github.com/cgasgarth/clodex/tree/main/plugins/native-compaction) | Native GPT compact endpoint and Claude Code checkpoint bridge; no extra process |
 | `agents/` | Named Fable, Opus, and Gemini roles through VibeProxy |
 | [AGENTS.md](AGENTS.md) | Global engineering and communication instructions |

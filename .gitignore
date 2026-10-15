@@ -27,4 +27,5 @@
 !secondwind-plugin/README.md
 !secondwind-plugin/src/
 !secondwind-plugin/src/lib.rs
+!secondwind-plugin/src/text.rs
 !secondwind-plugin/src/dashboard.html

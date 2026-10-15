@@ -1,6 +1,6 @@
 use base64::{engine::general_purpose::STANDARD, Engine};
 use hdrhistogram::Histogram;
-use secondwind_optimize::{tokens::Tiktoken, Optimizer, Outcome};
+use secondwind_optimize::{tokens::Tiktoken, Optimizer};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
@@ -12,6 +12,8 @@ use std::{
     sync::{Arc, Mutex, OnceLock},
     time::Instant,
 };
+
+mod text;
 
 // One compressor for the entire proxy. The lock protects Secondwind's mutable API.
 struct SharedCompressor {
@@ -63,6 +65,9 @@ fn save_metrics(path: &Path, metrics: &Metrics, latency: &Histogram<u64>) -> Res
     let bytes = serde_json::to_vec(&json!({"metrics": metrics, "rewrite_latency": buckets}))
         .map_err(|e| e.to_string())?;
     let temp = path.with_extension("json.tmp");
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
     fs::write(&temp, bytes).map_err(|e| e.to_string())?;
     fs::rename(temp, path).map_err(|e| e.to_string())
 }
@@ -91,7 +96,7 @@ fn compressor() -> &'static Mutex<SharedCompressor> {
         let mut optimizer = Optimizer::default().with_counter(Arc::new(Tiktoken::cl100k()));
         optimizer.set_offload_allowed(false);
         let path = std::env::var_os("HOME")
-            .map(|home| PathBuf::from(home).join(".cli-proxy-api/secondwind-metrics.json"));
+            .map(|home| PathBuf::from(home).join(".local/share/cpa-secondwind/metrics.json"));
         let loaded = path
             .as_ref()
             .ok_or_else(|| "HOME is unset".to_owned())
@@ -119,14 +124,19 @@ fn compressor() -> &'static Mutex<SharedCompressor> {
     })
 }
 
-fn compress_text(value: &mut Value, optimizer: &mut Optimizer, metrics: &mut Metrics) -> bool {
+fn compress_text(
+    value: &mut Value,
+    optimizer: &mut Optimizer,
+    metrics: &mut Metrics,
+    tool: bool,
+) -> bool {
     let Some(text) = value.as_str() else {
         return false;
     };
     let before = optimizer.count(text) as u64;
     metrics.outputs += 1;
     metrics.tokens_before += before;
-    if let Outcome::Compressed { wire, .. } = optimizer.compress_block(text) {
+    if let Some(wire) = text::rewrite(text, optimizer, tool) {
         metrics.tokens_after += optimizer.count(&wire) as u64;
         metrics.rewritten_outputs += 1;
         *value = Value::String(wire);
@@ -137,9 +147,14 @@ fn compress_text(value: &mut Value, optimizer: &mut Optimizer, metrics: &mut Met
     }
 }
 
-fn compress_content(value: &mut Value, optimizer: &mut Optimizer, metrics: &mut Metrics) -> bool {
+fn compress_content(
+    value: &mut Value,
+    optimizer: &mut Optimizer,
+    metrics: &mut Metrics,
+    tool: bool,
+) -> bool {
     if value.is_string() {
-        return compress_text(value, optimizer, metrics);
+        return compress_text(value, optimizer, metrics, tool);
     }
     let Some(parts) = value.as_array_mut() else {
         return false;
@@ -150,7 +165,44 @@ fn compress_content(value: &mut Value, optimizer: &mut Optimizer, metrics: &mut 
             part["type"].as_str(),
             Some("text" | "input_text" | "output_text")
         ) {
-            changed |= compress_text(&mut part["text"], optimizer, metrics);
+            changed |= compress_text(&mut part["text"], optimizer, metrics, tool);
+        }
+    }
+    changed
+}
+
+fn rewrite_payload(request: &mut Value, optimizer: &mut Optimizer, metrics: &mut Metrics) -> bool {
+    let mut changed = false;
+    if request.get("input").is_some_and(Value::is_string) {
+        changed |= compress_content(&mut request["input"], optimizer, metrics, false);
+    }
+    if let Some(input) = request.get_mut("input").and_then(Value::as_array_mut) {
+        for item in input {
+            if matches!(
+                item["type"].as_str(),
+                Some("function_call_output" | "custom_tool_call_output")
+            ) {
+                changed |= compress_content(&mut item["output"], optimizer, metrics, true);
+            } else if item["role"] == "user" {
+                changed |= compress_content(&mut item["content"], optimizer, metrics, false);
+            }
+        }
+    }
+    if let Some(messages) = request.get_mut("messages").and_then(Value::as_array_mut) {
+        for message in messages {
+            if message["role"] == "tool" {
+                changed |= compress_content(&mut message["content"], optimizer, metrics, true);
+            } else if message["role"] == "user" {
+                changed |= compress_content(&mut message["content"], optimizer, metrics, false);
+                if let Some(parts) = message["content"].as_array_mut() {
+                    for part in parts {
+                        if part["type"] == "tool_result" {
+                            changed |=
+                                compress_content(&mut part["content"], optimizer, metrics, true);
+                        }
+                    }
+                }
+            }
         }
     }
     changed
@@ -174,30 +226,7 @@ fn rewrite(body: &[u8]) -> Result<Option<Vec<u8>>, String> {
     if let Some(model) = request["model"].as_str() {
         optimizer.set_model(model);
     }
-    let mut changed = false;
-    if let Some(input) = request.get_mut("input").and_then(Value::as_array_mut) {
-        for item in input {
-            if matches!(
-                item["type"].as_str(),
-                Some("function_call_output" | "custom_tool_call_output")
-            ) {
-                changed |= compress_content(&mut item["output"], optimizer, metrics);
-            }
-        }
-    }
-    if let Some(messages) = request.get_mut("messages").and_then(Value::as_array_mut) {
-        for message in messages {
-            if message["role"] == "tool" {
-                changed |= compress_content(&mut message["content"], optimizer, metrics);
-            } else if let Some(parts) = message["content"].as_array_mut() {
-                for part in parts {
-                    if part["type"] == "tool_result" {
-                        changed |= compress_content(&mut part["content"], optimizer, metrics);
-                    }
-                }
-            }
-        }
-    }
+    let changed = rewrite_payload(&mut request, optimizer, metrics);
     let result = if changed {
         let body = serde_json::to_vec(&request).map_err(|e| e.to_string())?;
         metrics.rewritten_requests += 1;
@@ -244,7 +273,7 @@ fn dispatch(method: &str, request: &[u8]) -> Result<Value, String> {
             let _ = STATS_URL.set(format!("{base}/plugins/cpa-secondwind/stats"));
             Ok(json!({
                 "routes": [{"Method": "GET", "Path": "/plugins/cpa-secondwind/stats"}],
-                "resources": [{"Path": "/dashboard", "Menu": "Secondwind", "Description": "Lossless tool-output token savings"}]
+                "resources": [{"Path": "/dashboard", "Menu": "Secondwind", "Description": "Lossless structured-text token savings"}]
             }))
         }
         "management.handle" => {
@@ -407,6 +436,96 @@ unsafe extern "C" fn shutdown() {}
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn data() -> String {
+        serde_json::to_string_pretty(
+            &(0..40)
+                .map(|i| json!({"id": i, "name": format!("row-{i}"), "active": true}))
+                .collect::<Vec<_>>(),
+        )
+        .unwrap()
+    }
+
+    fn optimizer() -> Optimizer {
+        let mut optimizer = Optimizer::default().with_counter(Arc::new(Tiktoken::cl100k()));
+        optimizer.set_offload_allowed(false);
+        optimizer
+    }
+
+    #[test]
+    fn embedded_data_preserves_surrounding_text_and_code_fences() {
+        let data = data();
+        let code = format!("```javascript\nconst records = {data};\n```\n");
+        let before = format!("Header stays.\n\n{code}\n```json\n{data}\n```\n\nFooter stays.");
+        let after = text::rewrite(&before, &mut optimizer(), false).unwrap();
+        assert!(after.starts_with("Header stays.\n\n"));
+        assert!(after.contains(&code));
+        assert!(after.contains("```text\n"));
+        assert!(after.ends_with("\n\nFooter stays."));
+        let plain = format!("Header stays.\n{data}\nFooter stays.");
+        let after = text::rewrite(&plain, &mut optimizer(), false).unwrap();
+        assert!(after.starts_with("Header stays.\n"));
+        assert!(after.ends_with("\nFooter stays."));
+        let paths = (0..30)
+            .map(|i| format!("src/components/records/file-{i}.rs"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let mixed = format!("Header stays.\n\n{paths}\n\nFooter stays.");
+        let after = text::rewrite(&mixed, &mut optimizer(), true).unwrap();
+        assert!(after.starts_with("Header stays.\n\n"));
+        assert!(after.ends_with("\n\nFooter stays."));
+    }
+
+    #[test]
+    fn protocol_routing_preserves_instructions_tool_calls_and_images() {
+        let data = data();
+        let text = format!("Inspect this data:\n{data}\nKeep this footer.");
+        for mut request in [
+            json!({"input":[{"role":"developer","content":data},{"role":"assistant","content":data},{"role":"user","content":[{"type":"input_text","text":text},{"type":"input_image","image_url":"data:image/png;base64,example"}]},{"type":"function_call","name":"lookup","call_id":"one","arguments":data},{"type":"function_call_output","call_id":"one","output":text}],"tools":[{"name":"lookup","parameters":{"description":data}}],"instructions":data}),
+            json!({"messages":[{"role":"system","content":data},{"role":"assistant","content":data,"tool_calls":[{"id":"one","function":{"name":"lookup","arguments":data}}]},{"role":"user","content":text},{"role":"tool","tool_call_id":"one","content":text}],"tools":[{"name":"lookup","parameters":{"description":data}}]}),
+            json!({"messages":[{"role":"assistant","content":[{"type":"tool_use","id":"one","name":"lookup","input":{"data":data}}]},{"role":"user","content":[{"type":"text","text":text},{"type":"tool_result","tool_use_id":"one","content":[{"type":"text","text":text},{"type":"image","source":{"data":"example"}}]}]}],"system":data}),
+        ] {
+            let original = request.clone();
+            let mut metrics = Metrics::default();
+            assert!(rewrite_payload(
+                &mut request,
+                &mut optimizer(),
+                &mut metrics
+            ));
+            assert!(metrics.rewritten_outputs >= 2);
+            assert_eq!(request["tools"], original["tools"]);
+            assert_eq!(request["instructions"], original["instructions"]);
+            assert_eq!(request["system"], original["system"]);
+            for field in ["input", "messages"] {
+                if let Some(items) = request[field].as_array() {
+                    for (i, item) in items.iter().enumerate() {
+                        let old = &original[field][i];
+                        if item["role"] == "assistant"
+                            || item["role"] == "system"
+                            || item["role"] == "developer"
+                            || item["type"] == "function_call"
+                        {
+                            assert_eq!(item, old);
+                        }
+                        for id in ["call_id", "tool_call_id"] {
+                            assert_eq!(item[id], old[id]);
+                        }
+                        if let Some(parts) = item["content"].as_array() {
+                            for (j, part) in parts.iter().enumerate() {
+                                assert_eq!(part["tool_use_id"], old["content"][j]["tool_use_id"]);
+                                if part["type"] == "input_image" {
+                                    assert_eq!(part, &old["content"][j]);
+                                }
+                                if part["type"] == "tool_result" {
+                                    assert_eq!(part["content"][1], old["content"][j]["content"][1]);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 
     #[test]
     fn metrics_survive_reload_and_file_replacement() {
