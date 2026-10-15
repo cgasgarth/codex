@@ -1,4 +1,4 @@
-"""Set shared instructions for non-OpenAI models before Codex loads its catalog."""
+"""Set Claude instructions for non-OpenAI models before Codex loads its catalog."""
 
 import copy
 import json
@@ -6,13 +6,13 @@ import os
 import tempfile
 from pathlib import Path
 
-catalog_path = Path(__file__).resolve().parents[1] / "model-catalog.json"
+codex_root = Path(__file__).resolve().parents[1]
+catalog_path = codex_root / "model-catalog.json"
 catalog = json.loads(catalog_path.read_text())
 models = {model["slug"]: model for model in catalog["models"]}
 sol = models["gpt-6.1-sol"]
 shared_messages = copy.deepcopy(sol["model_messages"])
-_, instruction_body = shared_messages["instructions_template"].split(". ", 1)
-shared_messages["instructions_template"] = "You are Codex, a coding agent. " + instruction_body
+shared_messages["instructions_template"] = (codex_root / "prompts/claude-instructions.md").read_text()
 fields = (
     "model_messages",
     "include_apps_usage_instructions",

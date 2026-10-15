@@ -6,6 +6,8 @@
 !bin/
 !bin/codex
 !bin/sync-model-messages.py
+!prompts/
+!prompts/claude-instructions.md
 !launchagents/
 !launchagents/com.cgas.codex-startup.plist
 !skills/

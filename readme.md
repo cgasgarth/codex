@@ -82,7 +82,11 @@ Cross-provider subagents use `fork_turns="none"` with an explicit task brief.
 
 On each backend/CLI start, [sync-model-messages.py](bin/sync-model-messages.py)
 copies Sol's `model_messages` and app/skill/plugin usage flags to non-OpenAI
-catalog entries. The opening sentence becomes “You are Codex, a coding agent.”
+catalog entries. Their `instructions_template` comes from
+[claude-instructions.md](prompts/claude-instructions.md): a Claude Code style
+prompt adapted to Codex channels, `functions.exec`, and file links. Edit that
+file, not the catalog. The file name avoids `claude.md` because Claude Code
+loads that name as project instructions.
 OpenAI entries (`gpt-*` and `codex-*`) keep their original messages. It writes
 only when values differ. Changes to Sol's catalog entry reach the shared default
 on the next start; it does not download new Sol templates.
