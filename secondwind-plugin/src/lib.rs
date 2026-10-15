@@ -93,7 +93,9 @@ static STATS_URL: OnceLock<String> = OnceLock::new();
 
 fn compressor() -> &'static Mutex<SharedCompressor> {
     COMPRESSOR.get_or_init(|| {
-        let mut optimizer = Optimizer::default().with_counter(Arc::new(Tiktoken::cl100k()));
+        let mut optimizer = Optimizer::default()
+            .with_counter(Arc::new(Tiktoken::cl100k()))
+            .with_text_proposer(Box::new(text::ReadableLines));
         optimizer.set_offload_allowed(false);
         let path = std::env::var_os("HOME")
             .map(|home| PathBuf::from(home).join(".local/share/cpa-secondwind/metrics.json"));
@@ -447,7 +449,9 @@ mod tests {
     }
 
     fn optimizer() -> Optimizer {
-        let mut optimizer = Optimizer::default().with_counter(Arc::new(Tiktoken::cl100k()));
+        let mut optimizer = Optimizer::default()
+            .with_counter(Arc::new(Tiktoken::cl100k()))
+            .with_text_proposer(Box::new(text::ReadableLines));
         optimizer.set_offload_allowed(false);
         optimizer
     }
@@ -525,6 +529,52 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn nested_command_outputs_keep_envelope_metadata() {
+        let paths = (0..30)
+            .map(|i| format!("src/components/records/file-{i}.rs"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        let original = json!({"status":"fulfilled","value":{"chunk_id":"one","exit_code":7,"wall_time_seconds":0.2,"output":paths,"extra":"keep"}});
+        let raw = serde_json::to_string(&original).unwrap();
+        let wire = text::rewrite(&raw, &mut optimizer(), true).unwrap();
+        let mut after: Value = serde_json::from_str(&wire).unwrap();
+        assert_ne!(after["value"]["output"], original["value"]["output"]);
+        after["value"]["output"] = original["value"]["output"].clone();
+        assert_eq!(after, original);
+    }
+
+    #[test]
+    fn compact_json_preserves_fence_language_and_leaves_ambiguous_keys_unchanged() {
+        let raw = "Header.\n```json\n{\n  \"enabled\": true,\n  \"limit\": 123456789012345678901234567890,\n  \"note\": \"keep spacing  inside strings\"\n}\n```\nFooter.";
+        let wire = text::rewrite(raw, &mut optimizer(), false).unwrap();
+        assert!(wire.starts_with("Header.\n```json\n{"));
+        assert!(wire.ends_with("\n```\nFooter."));
+        assert!(wire.contains("123456789012345678901234567890"));
+        assert!(wire.contains("keep spacing  inside strings"));
+        assert!(text::rewrite("{\"key\":1,\"key\":2}", &mut optimizer(), false).is_none());
+    }
+
+    #[test]
+    fn line_dictionary_is_limited_to_tool_results_outside_code_fences() {
+        let raw = (0..16).map(|i| format!("service: service-{i}\n  restart: always\n  healthcheck:\n    interval: 30s\n    retries: 3\n  cache: warm\n  port: {}",8000+i)).collect::<Vec<_>>().join("\n");
+        let mut request = json!({"messages":[{"role":"user","content":raw},{"role":"assistant","content":raw},{"role":"tool","tool_call_id":"one","content":raw}]});
+        let original = request.clone();
+        assert!(rewrite_payload(
+            &mut request,
+            &mut optimizer(),
+            &mut Metrics::default()
+        ));
+        assert_eq!(request["messages"][0], original["messages"][0]);
+        assert_eq!(request["messages"][1], original["messages"][1]);
+        assert!(request["messages"][2]["content"]
+            .as_str()
+            .unwrap()
+            .starts_with("Lossless line dictionary:"));
+        let fenced = format!("```rust\n{raw}\n```\n");
+        assert!(text::rewrite(&fenced, &mut optimizer(), true).is_none());
     }
 
     #[test]

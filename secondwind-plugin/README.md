@@ -2,19 +2,25 @@
 
 One native plugin and one shared compressor. Compresses JSON data in user text
 (including loaded skill documentation), and structured sections in tool results,
-across Responses, Chat Completions, and Claude Messages. Uses Secondwind's built-in
-lossless codecs; offloading and prose summarization are disabled.
+across Responses, Chat Completions, and Claude Messages. Also compresses nested
+MCP/command result text, removes JSON formatting whitespace, and replaces repeated
+tool-result lines with an inline dictionary and decoding instructions. Only uses
+rewrites that reduce tokens; offloading and prose summarization are disabled.
 
 Keeps surrounding text, system instructions, assistant messages, API tool schemas,
 tool-call arguments, and images intact. Programming-language fences are preserved.
-Compressed JSON fences become text fences because Secondwind emits a table format.
+JSON fences keep their label when the result is JSON; table rewrites use text fences.
+
+Readability checks covered Luna, Sol, Opus, and Fable, including exact code edits
+from tool results. Column-text and log-template codecs remain disabled: they
+caused wrong answers in these checks.
 
 No extra process, per-chat cache, retrieval tool, or artifact storage. VibeProxy
 keeps routing, streaming, credentials, and compaction.
 
 Build with `cargo build --release`. The Secondwind revision is pinned in
 `Cargo.toml`. Install `target/release/libcpa_secondwind.dylib` as
-`~/.cli-proxy-api/plugins/darwin/arm64/cpa-secondwind-v0.6.0.dylib` while the plugin
+`~/.cli-proxy-api/plugins/darwin/arm64/cpa-secondwind-v0.7.0.dylib` while the plugin
 is disabled, then enable `plugins.configs.cpa-secondwind.enabled` in VibeProxy.
 The config is `~/.cli-proxy-api/config.yaml`; the running proxy reads
 `merged-config.yaml`.
@@ -25,9 +31,8 @@ The **Secondwind** sidebar page shows cumulative token estimates and rewrite cou
 It uses the management center's saved login. Counts include retries and resent text blocks; they are not billing
 savings. Totals, per-model savings, and the latency histogram are saved after each
 request to `~/.local/share/cpa-secondwind/metrics.json` with an atomic file replacement.
-This directory is outside CPA's credential scan. Move the existing metrics file there
-with the plugin disabled when upgrading from 0.5.0; counters and latency history are retained.
-They survive plugin reloads and proxy restarts. Save errors appear on the dashboard.
+This directory is outside CPA's credential scan. Counts survive plugin reloads
+and proxy restarts. Save errors appear on the dashboard.
 
 Median and p99 rewrite time cover each changed request: JSON parsing, compressor
 wait, compression, and JSON encoding. They exclude model response time and metrics file writes. A shared
