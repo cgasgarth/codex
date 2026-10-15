@@ -33,6 +33,14 @@ struct Metrics {
     tokens_before: u64,
     tokens_after: u64,
     saved_tokens_by_model: BTreeMap<String, u64>,
+    #[serde(default)]
+    savings_by_method: BTreeMap<String, MethodSavings>,
+}
+
+#[derive(Default, Serialize, Deserialize)]
+struct MethodSavings {
+    saved_tokens: u64,
+    rewritten_blocks: u64,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -138,10 +146,15 @@ fn compress_text(
     let before = optimizer.count(text) as u64;
     metrics.outputs += 1;
     metrics.tokens_before += before;
-    if let Some(wire) = text::rewrite(text, optimizer, tool) {
-        metrics.tokens_after += optimizer.count(&wire) as u64;
+    if let Some(rewrite) = text::rewrite(text, optimizer, tool) {
+        let after = optimizer.count(&rewrite.wire) as u64;
+        metrics.tokens_after += after;
         metrics.rewritten_outputs += 1;
-        *value = Value::String(wire);
+        let method = rewrite.methods.into_iter().collect::<Vec<_>>().join("+");
+        let entry = metrics.savings_by_method.entry(method).or_default();
+        entry.saved_tokens += before - after;
+        entry.rewritten_blocks += 1;
+        *value = Value::String(rewrite.wire);
         true
     } else {
         metrics.tokens_after += before;
@@ -287,6 +300,16 @@ fn dispatch(method: &str, request: &[u8]) -> Result<Value, String> {
                 let guard = compressor().lock().map_err(|e| e.to_string())?;
                 let mut stats = serde_json::to_value(&guard.metrics).map_err(|e| e.to_string())?;
                 stats["persistence_error"] = json!(guard.persistence_error);
+                let tracked: u64 = guard
+                    .metrics
+                    .savings_by_method
+                    .values()
+                    .map(|m| m.saved_tokens)
+                    .sum();
+                stats["method_tracked_tokens"] = json!(tracked);
+                stats["method_untracked_tokens"] = json!((guard.metrics.tokens_before
+                    - guard.metrics.tokens_after)
+                    .saturating_sub(tracked));
                 let prices = input_prices();
                 let mut savings = 0.0;
                 let mut unpriced_tokens = 0;
@@ -461,13 +484,15 @@ mod tests {
         let data = data();
         let code = format!("```javascript\nconst records = {data};\n```\n");
         let before = format!("Header stays.\n\n{code}\n```json\n{data}\n```\n\nFooter stays.");
-        let after = text::rewrite(&before, &mut optimizer(), false).unwrap();
+        let after = text::rewrite(&before, &mut optimizer(), false)
+            .unwrap()
+            .wire;
         assert!(after.starts_with("Header stays.\n\n"));
         assert!(after.contains(&code));
         assert!(after.contains("```text\n"));
         assert!(after.ends_with("\n\nFooter stays."));
         let plain = format!("Header stays.\n{data}\nFooter stays.");
-        let after = text::rewrite(&plain, &mut optimizer(), false).unwrap();
+        let after = text::rewrite(&plain, &mut optimizer(), false).unwrap().wire;
         assert!(after.starts_with("Header stays.\n"));
         assert!(after.ends_with("\nFooter stays."));
         let paths = (0..30)
@@ -475,7 +500,7 @@ mod tests {
             .collect::<Vec<_>>()
             .join("\n");
         let mixed = format!("Header stays.\n\n{paths}\n\nFooter stays.");
-        let after = text::rewrite(&mixed, &mut optimizer(), true).unwrap();
+        let after = text::rewrite(&mixed, &mut optimizer(), true).unwrap().wire;
         assert!(after.starts_with("Header stays.\n\n"));
         assert!(after.ends_with("\n\nFooter stays."));
     }
@@ -539,7 +564,7 @@ mod tests {
             .join("\n");
         let original = json!({"status":"fulfilled","value":{"chunk_id":"one","exit_code":7,"wall_time_seconds":0.2,"output":paths,"extra":"keep"}});
         let raw = serde_json::to_string(&original).unwrap();
-        let wire = text::rewrite(&raw, &mut optimizer(), true).unwrap();
+        let wire = text::rewrite(&raw, &mut optimizer(), true).unwrap().wire;
         let mut after: Value = serde_json::from_str(&wire).unwrap();
         assert_ne!(after["value"]["output"], original["value"]["output"]);
         after["value"]["output"] = original["value"]["output"].clone();
@@ -549,7 +574,7 @@ mod tests {
     #[test]
     fn compact_json_preserves_fence_language_and_leaves_ambiguous_keys_unchanged() {
         let raw = "Header.\n```json\n{\n  \"enabled\": true,\n  \"limit\": 123456789012345678901234567890,\n  \"note\": \"keep spacing  inside strings\"\n}\n```\nFooter.";
-        let wire = text::rewrite(raw, &mut optimizer(), false).unwrap();
+        let wire = text::rewrite(raw, &mut optimizer(), false).unwrap().wire;
         assert!(wire.starts_with("Header.\n```json\n{"));
         assert!(wire.ends_with("\n```\nFooter."));
         assert!(wire.contains("123456789012345678901234567890"));
@@ -578,6 +603,43 @@ mod tests {
     }
 
     #[test]
+    fn method_totals_count_only_accepted_outer_blocks() {
+        let lines = (0..16).map(|i| format!("service: service-{i}\n  restart: always\n  healthcheck:\n    interval: 30s\n    retries: 3\n  cache: warm\n  port: {}",8000+i)).collect::<Vec<_>>().join("\n");
+        let nested = serde_json::to_string_pretty(&json!({"exit_code":0,"output":lines})).unwrap();
+        let whitespace =
+            "{\n  \"enabled\": true,\n  \"limit\": 123,\n  \"note\": \"keep spaces  inside\"\n}";
+        let mut request = json!({"messages":[{"role":"tool","content":nested},{"role":"user","content":whitespace},{"role":"user","content":data()}]});
+        let mut metrics = Metrics::default();
+        assert!(rewrite_payload(
+            &mut request,
+            &mut optimizer(),
+            &mut metrics
+        ));
+        assert_eq!(
+            metrics
+                .savings_by_method
+                .values()
+                .map(|m| m.saved_tokens)
+                .sum::<u64>(),
+            metrics.tokens_before - metrics.tokens_after
+        );
+        assert_eq!(
+            metrics
+                .savings_by_method
+                .values()
+                .map(|m| m.rewritten_blocks)
+                .sum::<u64>(),
+            metrics.rewritten_outputs
+        );
+        assert_eq!(metrics.savings_by_method.len(), 3);
+        assert!(metrics.savings_by_method.contains_key("json_whitespace"));
+        assert!(metrics
+            .savings_by_method
+            .keys()
+            .any(|k| k.contains("readable_lines") && k.contains("tool_envelope")));
+    }
+
+    #[test]
     fn metrics_survive_reload_and_file_replacement() {
         let path = std::env::temp_dir().join(format!(
             "secondwind-metrics-test-{}.json",
@@ -590,6 +652,13 @@ mod tests {
         metrics
             .saved_tokens_by_model
             .insert("example-model".into(), 400);
+        metrics.savings_by_method.insert(
+            "json_whitespace".into(),
+            MethodSavings {
+                saved_tokens: 400,
+                rewritten_blocks: 2,
+            },
+        );
         latency.record_n(125, 2).unwrap();
         latency.record(9000).unwrap();
         save_metrics(&path, &metrics, &latency).unwrap();
@@ -597,6 +666,14 @@ mod tests {
         assert_eq!(restored.requests, 3);
         assert_eq!(restored.tokens_before - restored.tokens_after, 400);
         assert_eq!(restored.saved_tokens_by_model["example-model"], 400);
+        assert_eq!(
+            restored.savings_by_method["json_whitespace"].saved_tokens,
+            400
+        );
+        assert_eq!(
+            restored.savings_by_method["json_whitespace"].rewritten_blocks,
+            2
+        );
         assert_eq!(restored_latency.len(), latency.len());
         for q in [0.5, 0.99] {
             assert_eq!(
