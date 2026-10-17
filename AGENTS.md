@@ -9,6 +9,13 @@
 - Use @Browser by default for browser work unless the user explicitly requests another browser.
 - For background work over one minute that cannot be tracked through CLI output, schedule checks near the expected completion time instead of constant polling.
 
+## File search
+
+- Use the `fff` MCP server for file name, path, and content searches in the current repository or worktree.
+- Use `find_files` for names and paths, `grep` for content, and `multi_grep` for several literal terms in one call. These are tools from the `fff` server.
+- Start each session in the repository or worktree that must be searched. `fff` indexes its startup directory.
+- Use short queries and directory or glob constraints. Keep results small, then read the matching files.
+
 ## Pull request descriptions
 
 - Use the `show-me` skill when writing or updating PR descriptions. Follow its instructions to explain the change visually and keep the description concise.
