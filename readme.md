@@ -110,7 +110,7 @@ upstream:
 
 [CPA Usage Keeper](https://github.com/Willxup/cpa-usage-keeper) runs at
 http://localhost:8080 and appears as **Keeper** in VibeProxy's management center.
-Login uses the existing CPA management password. Homebrew starts it at login;
+Keeper login is disabled; it listens only on `127.0.0.1`. Homebrew starts it at login;
 history is stored in `/opt/homebrew/var/cpa-usage-keeper` and uses Central time.
 Its private config is `/opt/homebrew/etc/cpa-usage-keeper.env`.
 Use `brew services restart cpa-usage-keeper` to restart or
