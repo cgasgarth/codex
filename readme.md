@@ -95,26 +95,16 @@ Opus and Fable use `tool_mode: code_mode_only` and
 Discovery keeps the full tool catalog out of each request. Restart the app after
 catalog changes; existing chats use the updated settings when resumed.
 
-VibeProxy loads the upstream [Codex Tool Search Shim prototype](https://github.com/router-for-me/CLIProxyAPI/pull/6140)
-v0.4.1, source `cf11b0bebd0722369e1b8e44f6ed4b6360b64750`. It maps Codex's
-client search protocol to Claude tools and restores discovered tool identities.
-The source was built against the current v8 SDK by changing its v7 imports to v8;
-no CLIProxyAPI or VibeProxy version is pinned. Live Opus HTTP and WebSocket
-search/call/result checks passed.
-
-Plugin config in `~/.cli-proxy-api/config.yaml` and `merged-config.yaml`:
+VibeProxy uses built-in Claude tool search. It translates Codex search calls,
+restores tool names, and uses Anthropic deferred tools to preserve the cache
+prefix. The old Codex Tool Search Shim plugin is disabled.
+Settings in `~/.cli-proxy-api/config.yaml` and `merged-config.yaml`:
 
 ```yaml
-codex-tool-search-shim:
-  enabled: true
-  priority: 200
-  bridge_models: [claude-opus-5-5, claude-fable-5-1]
-  max_active_tool_bytes: 2097152
+upstream:
+  claude:
+    tool-search: true
 ```
-
-For rollback, disable this plugin in the management UI and set
-`supports_search_tool` to `false` on both Claude catalog entries, then restart
-the app. This restores the full catalog and its large context cost.
 
 ## Usage dashboard
 
